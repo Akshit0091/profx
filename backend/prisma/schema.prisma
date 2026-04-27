@@ -1,0 +1,77 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String?
+  phone        String?
+  isAdmin      Boolean       @default(false)
+  isActive     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  subscription Subscription?
+  skus         SKU[]
+  orders       Order[]
+  @@map("users")
+}
+
+model Subscription {
+  id                     Int       @id @default(autoincrement())
+  userId                 Int       @unique
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpaySubscriptionId String?
+  razorpayCustomerId     String?
+  razorpayPaymentId      String?
+  plan                   String    @default("starter")
+  amount                 Int       @default(59900)
+  status                 String    @default("pending")
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  @@map("subscriptions")
+}
+
+model SKU {
+  id            Int      @id @default(autoincrement())
+  skuId         String
+  purchasePrice Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([skuId, userId])
+  @@map("skus")
+}
+
+model Order {
+  id             Int       @id @default(autoincrement())
+  orderItemId    String
+  orderId        String?
+  skuId          String?
+  dispatchDate   DateTime?
+  bankSettlement Float?
+  paymentDate    DateTime?
+  purchasePrice  Float?
+  profit         Float?
+  hasPickup      Boolean   @default(false)
+  hasSettlement  Boolean   @default(false)
+  isMatched      Boolean   @default(false)
+  trackingId     String?
+  isReturned     Boolean   @default(false)
+  returnDate     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  userId         Int
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([orderItemId, userId])
+  @@map("orders")
+}

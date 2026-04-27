@@ -1,0 +1,61 @@
+/* AdminPanel.css */
+.admin-page { animation: fadeUp 0.3s ease; }
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.admin-stat-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px 16px;
+  text-align: center;
+  transition: all 0.2s;
+}
+.admin-stat-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.revenue-card { border-color: var(--green-border); background: var(--green-bg); }
+
+.admin-stat-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  margin: 0 auto 10px;
+}
+.admin-stat-value { font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+.admin-stat-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  margin-bottom: 0;
+}
+
+.mt-4 { margin-top: 16px; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15,23,42,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+.modal-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 28px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: var(--shadow-lg);
+}
+.modal-title { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 0; }

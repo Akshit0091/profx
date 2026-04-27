@@ -1,0 +1,56 @@
+/* src/pages/Orders.css */
+
+.orders-page { animation: fadeIn 0.3s ease; }
+
+.filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px;
+  align-items: center;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.sortable:hover { color: var(--text); }
+
+.sort-icon {
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--text3);
+  font-size: 11px;
+}
+.sort-icon.active { color: var(--accent); }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.page-info {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+/* Returned row styling */
+.row-returned {
+  background: rgba(245, 158, 11, 0.04);
+}
+.row-returned:hover {
+  background: rgba(245, 158, 11, 0.07) !important;
+}
+
+/* Returned badge */
+.badge-returned {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.mt-4 { margin-top: 16px; }
