@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "openssl"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["node ./node_modules/prisma/build/index.js generate"]
+
+[start]
+cmd = "node ./node_modules/prisma/build/index.js db push --accept-data-loss && node server.js"
