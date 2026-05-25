@@ -1,0 +1,71 @@
+.payment-page {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.payment-card {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  padding: 40px 36px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--border);
+}
+
+.payment-header { text-align: center; margin-bottom: 28px; }
+.payment-header .logo-mark { margin: 0 auto 16px; width: 52px; height: 52px; font-size: 18px; }
+.payment-header h1 { font-size: 24px; margin: 0 0 8px; }
+.payment-header p { color: var(--text-muted); margin: 0; font-size: 14px; }
+
+.payment-plan {
+  background: linear-gradient(135deg, #eff6ff 0%, #ecfdf5 100%);
+  border: 1px solid #dbeafe;
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 22px;
+}
+.plan-name strong { display: block; font-size: 16px; }
+.plan-cycle { font-size: 12px; color: var(--text-muted); }
+.plan-price .amount { font-size: 30px; font-weight: 800; background: var(--gradient); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.plan-price .period { color: var(--text-muted); margin-left: 4px; font-size: 14px; }
+
+.payment-features { list-style: none; padding: 0; margin: 0 0 24px; }
+.payment-features li { padding: 7px 0; font-size: 14px; color: var(--text); }
+
+.payment-user {
+  background: #f8fafc;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+}
+.payment-user strong { color: var(--text); }
+
+.payment-error {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--error-soft);
+  color: var(--error);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.payment-secure { text-align: center; color: var(--text-muted); font-size: 12px; margin: 18px 0 0; }
+.payment-logout {
+  display: block;
+  margin: 18px auto 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: underline;
+}

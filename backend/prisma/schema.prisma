@@ -1,0 +1,127 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  password     String
+  name         String?
+  phone        String?
+  isAdmin      Boolean       @default(false)
+  isActive     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+
+  subscription Subscription?
+  skus         SKU[]
+  orders       Order[]
+  settlementEntries SettlementEntry[]
+}
+
+model Subscription {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  razorpaySubscriptionId String?
+  razorpayCustomerId     String?
+  razorpayPaymentId      String?
+
+  plan                   String   @default("starter")
+  amount                 Int      @default(59900)
+  status                 String   @default("pending") // pending | active | expired | cancelled
+
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model SKU {
+  id            String   @id @default(cuid())
+  skuId         String
+  purchasePrice Float
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([skuId, userId])
+}
+
+model Order {
+  id             String    @id @default(cuid())
+  orderItemId    String
+  orderId        String?
+  skuId          String?
+
+  dispatchDate   DateTime?
+  bankSettlement Float?
+  paymentDate    DateTime?
+
+  purchasePrice  Float?
+  profit         Float?
+
+  hasPickup      Boolean   @default(false)
+  hasSettlement  Boolean   @default(false)
+  isMatched      Boolean   @default(false)
+
+  trackingId     String?
+
+  isReturned     Boolean   @default(false)
+  returnDate     DateTime?
+
+  returnIncoming        Boolean   @default(false)
+  returnRequestedDate   DateTime?
+  returnReason          String?
+  returnSubReason       String?
+  returnStatus          String?
+
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([orderItemId, userId])
+  @@index([userId])
+  @@index([trackingId])
+  @@index([skuId])
+}
+
+// One row per Flipkart settlement line item.
+// Multiple entries for the same orderItemId accumulate — the Order's
+// bankSettlement is always the SUM of its entries.
+//
+// fileHash = SHA-256 of the uploaded file's bytes.  When the same file is
+// re-uploaded, all of that fileHash's entries are deleted and re-inserted,
+// so re-uploads are idempotent.  Different files contribute their own entries
+// independently, and the sum naturally reflects all of them.
+model SettlementEntry {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  orderItemId    String
+  orderId        String?
+  paymentDate    DateTime?
+  bankSettlement Float
+
+  fileHash       String
+  fileName       String?
+  rowIndex       Int       // position within the file, for re-upload stability
+
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, orderItemId])
+  @@index([userId, fileHash])
+}
