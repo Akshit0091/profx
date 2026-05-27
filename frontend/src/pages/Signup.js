@@ -39,8 +39,8 @@ export default function Signup() {
       <div className="auth-split">
         <div className="auth-panel">
           <Link to="/" className="auth-brand">
-            <div className="logo-mark">PX</div>
-            <strong>ProfX</strong>
+            <div className="logo-mark"><img src="/logo-icon.svg" alt="" /></div>
+            <strong>Profx</strong>
           </Link>
           <h2>Track every rupee</h2>
           <p className="auth-tag">Stop guessing your Flipkart profits.</p>

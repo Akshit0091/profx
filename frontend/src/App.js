@@ -20,7 +20,7 @@ import AdminPanel from './pages/AdminPanel';
 function FullScreenLoader() {
   return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="logo-mark" style={{ width: 56, height: 56, fontSize: 20 }}>PX</div>
+      <img src="/logo-icon.svg" alt="Profx" width={64} height={64} />
     </div>
   );
 }

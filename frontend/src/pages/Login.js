@@ -33,8 +33,8 @@ export default function Login() {
       <div className="auth-split">
         <div className="auth-panel">
           <Link to="/" className="auth-brand">
-            <div className="logo-mark">PX</div>
-            <strong>ProfX</strong>
+            <div className="logo-mark"><img src="/logo-icon.svg" alt="" /></div>
+            <strong>Profx</strong>
           </Link>
           <h2>Welcome back</h2>
           <p className="auth-tag">Sign in to see your latest profits.</p>

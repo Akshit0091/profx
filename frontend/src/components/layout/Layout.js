@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../utils/AuthContext';
+import Logo from '../Logo';
 import './Layout.css';
 
 export default function Layout({ children }) {
@@ -33,10 +34,10 @@ export default function Layout({ children }) {
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="brand">
-            <div className="logo-mark">PX</div>
+            <Logo variant="icon" size={36} />
             {!collapsed && (
               <div className="brand-text">
-                <div className="brand-name">ProfX</div>
+                <div className="brand-name">Profx</div>
                 <div className="brand-tag">Profit tracker</div>
               </div>
             )}

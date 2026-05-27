@@ -184,3 +184,16 @@ input:focus, select:focus, textarea:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* When .logo-mark contains an icon image instead of "PX" text, size it cleanly */
+.logo-mark img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  display: block;
+}
+.logo-mark:has(img) {
+  background: #fff !important;
+  color: transparent;
+  padding: 0;
+}

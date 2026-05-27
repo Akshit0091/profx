@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../utils/AuthContext';
+import Logo from '../Logo';
 import './MarketingLayout.css';
 
-function Logo() {
+function BrandLogo() {
   return (
-    <Link to="/" className="mk-logo" aria-label="ProfX home">
-      <span className="mk-logo-mark">PX</span>
-      <span className="mk-logo-wordmark">ProfX</span>
+    <Link to="/" className="mk-logo" aria-label="Profx home">
+      <Logo variant="lockup" size={32} />
     </Link>
   );
 }
@@ -31,7 +31,7 @@ export default function MarketingLayout({ children }) {
     <div className="mk-site">
       <header className={`mk-nav ${scrolled ? 'is-scrolled' : ''}`}>
         <div className="mk-container mk-nav-inner">
-          <Logo />
+          <BrandLogo />
 
           <nav className={`mk-nav-links ${mobileOpen ? 'is-open' : ''}`}>
             <NavLink to="/product" className="mk-nav-link">Product</NavLink>
@@ -85,7 +85,7 @@ export default function MarketingLayout({ children }) {
       <footer className="mk-footer">
         <div className="mk-container mk-footer-inner">
           <div className="mk-footer-brand">
-            <Logo />
+            <BrandLogo />
             <p className="mk-footer-tag">Know your real profit, every order, every day.</p>
           </div>
           <div className="mk-footer-cols">

@@ -22,9 +22,9 @@ export default function DashboardPreview() {
         {/* Sidebar */}
         <aside className="dp-sidebar">
           <div className="dp-brand">
-            <span className="dp-brand-mark">PX</span>
+            <span className="dp-brand-mark"><img src="/logo-icon.svg" alt="" /></span>
             <div className="dp-brand-text">
-              <strong>ProfX</strong>
+              <strong>Profx</strong>
               <small>Profit tracker</small>
             </div>
           </div>

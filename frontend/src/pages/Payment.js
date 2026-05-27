@@ -69,8 +69,8 @@ export default function Payment() {
     <div className="payment-page">
       <div className="payment-card">
         <div className="payment-header">
-          <div className="logo-mark">PX</div>
-          <h1>Activate your ProfX account</h1>
+          <div className="logo-mark"><img src="/logo-icon.svg" alt="" /></div>
+          <h1>Activate your Profx account</h1>
           <p>One simple payment to unlock unlimited profit tracking.</p>
         </div>
 
