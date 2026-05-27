@@ -34,7 +34,7 @@ async function sendEmail({ to, subject, html, replyTo }) {
   }
   try {
     const payload = { from: FROM, to, subject, html };
-    if (replyTo) payload.reply_to = replyTo;
+    if (replyTo) payload.replyTo = replyTo;
     const res = await resend.emails.send(payload);
     return res;
   } catch (err) {
