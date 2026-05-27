@@ -86,6 +86,9 @@ model Order {
   returnSubReason       String?
   returnStatus          String?
 
+  isStarred             Boolean   @default(false)
+  starredAt             DateTime?
+
   userId         String
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 

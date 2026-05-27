@@ -8,15 +8,24 @@ const inr = (n) =>
     : '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(Number(n));
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—');
 
+const daysAgoISO = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - (n - 1));
+  return d.toISOString().slice(0, 10);
+};
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 export default function Orders() {
   const [filters, setFilters] = useState({
     search: '',
     status: 'all',
-    dateFrom: '',
-    dateTo: '',
+    starred: false,
+    dateFrom: daysAgoISO(30),     // default: last 30 days
+    dateTo: todayISO(),
     sortBy: 'createdAt',
     sortDir: 'desc',
   });
+  const [quickRange, setQuickRange] = useState('30');     // 'all' | '7' | '30' | '90' | 'custom'
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ orders: [], pagination: { total: 0, totalPages: 1 } });
   const [loading, setLoading] = useState(true);
@@ -31,8 +40,36 @@ export default function Orders() {
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
+  // Apply a quick range — also tags quickRange so the active pill is right
+  const applyQuickRange = (key) => {
+    setPage(1);
+    if (key === 'all') {
+      setFilters((f) => ({ ...f, dateFrom: '', dateTo: '' }));
+    } else {
+      const n = parseInt(key, 10);
+      setFilters((f) => ({ ...f, dateFrom: daysAgoISO(n), dateTo: todayISO() }));
+    }
+    setQuickRange(key);
+  };
+
+  // When the user manually edits a date picker, the quick bar switches to "Custom"
+  const onCustomDateChange = (field, value) => {
+    setFilters((f) => ({ ...f, [field]: value }));
+    setQuickRange('custom');
+    setPage(1);
+  };
+
   const reset = () => {
-    setFilters({ search: '', status: 'all', dateFrom: '', dateTo: '', sortBy: 'createdAt', sortDir: 'desc' });
+    setFilters({
+      search: '',
+      status: 'all',
+      starred: false,
+      dateFrom: daysAgoISO(30),
+      dateTo: todayISO(),
+      sortBy: 'createdAt',
+      sortDir: 'desc',
+    });
+    setQuickRange('30');
     setPage(1);
   };
 
@@ -73,6 +110,26 @@ export default function Orders() {
       fetchOrders();
     } catch (err) {
       alert(err.response?.data?.error || `Failed to ${action}`);
+    }
+  };
+
+  // Toggle star — optimistic UI (no confirmation, just flip)
+  const toggleStar = async (order) => {
+    const next = !order.isStarred;
+    // Optimistic: update local state immediately so it feels instant
+    setData((d) => ({
+      ...d,
+      orders: d.orders.map((o) => (o.id === order.id ? { ...o, isStarred: next } : o)),
+    }));
+    try {
+      await api.patch(`/orders/${order.id}/star`, { starred: next });
+    } catch (err) {
+      // Revert on failure
+      setData((d) => ({
+        ...d,
+        orders: d.orders.map((o) => (o.id === order.id ? { ...o, isStarred: !next } : o)),
+      }));
+      alert('Failed to update star');
     }
   };
 
@@ -134,6 +191,31 @@ export default function Orders() {
         </div>
       </div>
 
+      {/* Quick date range bar */}
+      <div className="orders-quickbar">
+        <span className="orders-quickbar-label">Showing orders from:</span>
+        <div className="orders-quickbar-pills">
+          {[
+            { key: '7',   label: '7 days' },
+            { key: '30',  label: '30 days' },
+            { key: '90',  label: '90 days' },
+            { key: 'all', label: 'All time' },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              className={`quick-pill ${quickRange === opt.key ? 'is-active' : ''}`}
+              onClick={() => applyQuickRange(opt.key)}
+            >
+              {opt.label}
+            </button>
+          ))}
+          {quickRange === 'custom' && (
+            <span className="quick-pill is-active is-custom">Custom</span>
+          )}
+        </div>
+      </div>
+
       <div className="card filters-card">
         <input
           placeholder="Search order item / order ID / SKU / tracking ID…"
@@ -154,8 +236,8 @@ export default function Orders() {
           <option value="return-incoming">Return Incoming</option>
           <option value="returned">Returned</option>
         </select>
-        <input type="date" value={filters.dateFrom} onChange={(e) => { setFilters({ ...filters, dateFrom: e.target.value }); setPage(1); }} style={{ width: 160 }} />
-        <input type="date" value={filters.dateTo}   onChange={(e) => { setFilters({ ...filters, dateTo: e.target.value });   setPage(1); }} style={{ width: 160 }} />
+        <input type="date" value={filters.dateFrom} onChange={(e) => onCustomDateChange('dateFrom', e.target.value)} style={{ width: 160 }} />
+        <input type="date" value={filters.dateTo}   onChange={(e) => onCustomDateChange('dateTo',   e.target.value)} style={{ width: 160 }} />
         <select
           value={`${filters.sortBy}:${filters.sortDir}`}
           onChange={(e) => {
@@ -172,6 +254,15 @@ export default function Orders() {
           <option value="dispatchDate:desc">Dispatch date ↓</option>
           <option value="bankSettlement:desc">Settlement ↓</option>
         </select>
+        <button
+          type="button"
+          className={`starred-filter-toggle ${filters.starred ? 'is-active' : ''}`}
+          onClick={() => { setFilters({ ...filters, starred: !filters.starred }); setPage(1); }}
+          title={filters.starred ? 'Showing starred orders only — click to show all' : 'Show starred orders only'}
+        >
+          <span className="star-icon">{filters.starred ? '★' : '☆'}</span>
+          Starred only
+        </button>
         <button className="btn btn-secondary" onClick={reset}>Reset</button>
       </div>
 
@@ -180,6 +271,7 @@ export default function Orders() {
           <table className="orders-table">
             <thead>
               <tr>
+                <th className="star-col"></th>
                 <th>Order Item ID</th>
                 <th>Order ID</th>
                 <th>SKU</th>
@@ -195,9 +287,9 @@ export default function Orders() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} className="empty">Loading…</td></tr>
+                <tr><td colSpan={12} className="empty">Loading…</td></tr>
               ) : data.orders.length === 0 ? (
-                <tr><td colSpan={11} className="empty">No orders found. Upload reports to get started.</td></tr>
+                <tr><td colSpan={12} className="empty">No orders found. Upload reports to get started.</td></tr>
               ) : (
                 data.orders.map((o) => {
                   let rowClass = '';
@@ -210,6 +302,17 @@ export default function Orders() {
                     : o.profit < 0 ? 'neg' : 'pos';
                   return (
                     <tr key={o.id} className={rowClass}>
+                      <td className="star-col">
+                        <button
+                          type="button"
+                          className={`star-btn ${o.isStarred ? 'is-on' : ''}`}
+                          onClick={() => toggleStar(o)}
+                          title={o.isStarred ? 'Unstar this order' : 'Star this order (mark as reviewed)'}
+                          aria-label={o.isStarred ? 'Unstar' : 'Star'}
+                        >
+                          {o.isStarred ? '★' : '☆'}
+                        </button>
+                      </td>
                       <td className="mono">{o.orderItemId}</td>
                       <td className="mono">{o.orderId || '—'}</td>
                       <td className="mono">{o.skuId || '—'}</td>

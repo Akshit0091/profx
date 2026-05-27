@@ -15,6 +15,7 @@ router.get('/', async (req, res) => {
     const {
       search = '',
       status = 'all',
+      starred,
       dateFrom,
       dateTo,
       sortBy = 'createdAt',
@@ -24,6 +25,9 @@ router.get('/', async (req, res) => {
     } = req.query;
 
     const where = { userId };
+
+    // Starred toggle — independent of status, can combine with anything
+    if (starred === 'true' || starred === '1') where.isStarred = true;
 
     if (search) {
       where.OR = [
@@ -42,12 +46,12 @@ router.get('/', async (req, res) => {
     if (status === 'loss')            { where.isMatched = true; where.profit = { lt: 0 }; }
 
     if (dateFrom || dateTo) {
-      where.paymentDate = {};
-      if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
+      where.dispatchDate = {};
+      if (dateFrom) where.dispatchDate.gte = new Date(dateFrom);
       if (dateTo) {
         const end = new Date(dateTo);
         end.setHours(23, 59, 59, 999);
-        where.paymentDate.lte = end;
+        where.dispatchDate.lte = end;
       }
     }
 
@@ -106,6 +110,7 @@ router.get('/export', async (req, res) => {
       'Has Pickup':       o.hasPickup ? 'Yes' : 'No',
       'Has Settlement':   o.hasSettlement ? 'Yes' : 'No',
       'Is Matched':       o.isMatched ? 'Yes' : 'No',
+      'Starred':          o.isStarred ? 'Yes' : 'No',
       'Created':          fmt(o.createdAt),
     }));
 
@@ -173,6 +178,35 @@ router.patch('/:id/returned', async (req, res) => {
   } catch (err) {
     console.error('Mark-returned error:', err);
     res.status(500).json({ error: 'Failed to update order' });
+  }
+});
+
+// Toggle the "I've reviewed this" star on an order.
+// Stars are user-managed review state, preserved across all uploads and recalcs.
+// PATCH /api/orders/:id/star   { starred: true|false }
+router.patch('/:id/star', async (req, res) => {
+  try {
+    const { starred } = req.body || {};
+    if (typeof starred !== 'boolean') {
+      return res.status(400).json({ error: '"starred" must be true or false' });
+    }
+    const order = await prisma.order.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+      select: { id: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        isStarred: starred,
+        starredAt: starred ? new Date() : null,
+      },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Star toggle error:', err);
+    res.status(500).json({ error: 'Failed to update star' });
   }
 });
 
