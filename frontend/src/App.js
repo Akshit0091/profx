@@ -5,6 +5,9 @@ import Layout from './components/layout/Layout';
 import Landing from './pages/Landing';
 import Product from './pages/Product';
 import Contact from './pages/Contact';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import Refund from './pages/Refund';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Payment from './pages/Payment';
@@ -66,6 +69,9 @@ export default function App() {
           <Route path="/"        element={<PublicRoute><Landing /></PublicRoute>} />
           <Route path="/product" element={<Product />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms"   element={<Terms />} />
+          <Route path="/refund"  element={<Refund />} />
           <Route path="/login"   element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/signup"  element={<PublicRoute><Signup /></PublicRoute>} />
           <Route path="/payment" element={<PaymentRoute><Payment /></PaymentRoute>} />

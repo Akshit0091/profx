@@ -82,6 +82,12 @@ export default function Signup() {
               {loading ? <span className="spinner" /> : 'Create Account & Pay →'}
             </button>
 
+            <p className="auth-legal">
+              By creating an account you agree to our{' '}
+              <Link to="/terms">Terms</Link> and{' '}
+              <Link to="/privacy">Privacy Policy</Link>.
+            </p>
+
             <p className="auth-switch">
               Already have an account? <Link to="/login">Sign in</Link>
             </p>

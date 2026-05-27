@@ -100,11 +100,14 @@ export default function MarketingLayout({ children }) {
               <h4>Company</h4>
               <Link to="/contact">Contact</Link>
               <a href="mailto:contact.profx@gmail.com">Email us</a>
-            </div>
-            <div className="mk-footer-col">
-              <h4>Get started</h4>
               <Link to="/signup">Create account</Link>
               <Link to="/login">Sign in</Link>
+            </div>
+            <div className="mk-footer-col">
+              <h4>Legal</h4>
+              <Link to="/privacy">Privacy Policy</Link>
+              <Link to="/terms">Terms &amp; Conditions</Link>
+              <Link to="/refund">Refund &amp; Cancellation</Link>
             </div>
           </div>
         </div>
