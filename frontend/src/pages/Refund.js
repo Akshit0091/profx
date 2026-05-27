@@ -24,7 +24,7 @@ export default function Refund() {
           <h2>1. Cancelling your subscription</h2>
           <p>
             You can cancel anytime by emailing{' '}
-            <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a> from
+            <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a> from
             the email address on your ProfX account. State that you'd like to cancel.
             We'll confirm the cancellation by reply.
           </p>
@@ -122,7 +122,7 @@ export default function Refund() {
           <h2>7. Contact</h2>
           <p>
             All refund and cancellation requests must be sent to{' '}
-            <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a> from
+            <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a> from
             the email on your ProfX account.
           </p>
 

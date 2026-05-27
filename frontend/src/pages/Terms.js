@@ -19,7 +19,7 @@ export default function Terms() {
           <p className="legal-lead">
             These Terms govern your use of ProfX. By signing up or using the service,
             you agree to them. Please read carefully — and email{' '}
-            <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a> if
+            <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a> if
             anything is unclear.
           </p>
 
@@ -44,7 +44,7 @@ export default function Terms() {
             </li>
             <li>
               You must notify us immediately if you suspect unauthorized access at{' '}
-              <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a>.
+              <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a>.
             </li>
           </ul>
 
@@ -183,7 +183,7 @@ export default function Terms() {
 
           <h2>15. Contact</h2>
           <p>
-            Email <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a>{' '}
+            Email <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a>{' '}
             for any questions regarding these Terms.
           </p>
 

@@ -27,7 +27,7 @@ export default function Privacy() {
             ProfX is a software-as-a-service product that helps Flipkart sellers track
             order-level profitability. We are based in India. The data controller for the
             purposes of this policy is the ProfX team, reachable at{' '}
-            <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a>.
+            <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a>.
           </p>
 
           <h2>2. What we collect</h2>
@@ -111,7 +111,7 @@ export default function Privacy() {
           </ul>
           <p>
             To exercise any of these rights, email{' '}
-            <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a>.
+            <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a>.
           </p>
 
           <h2>8. Security</h2>
@@ -144,7 +144,7 @@ export default function Privacy() {
           <h2>12. Contact</h2>
           <p>
             Questions, concerns, or requests:{' '}
-            <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a>.
+            <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a>.
           </p>
 
           <div className="legal-related">

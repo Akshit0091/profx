@@ -67,7 +67,7 @@ const FAQ = [
   },
   {
     q: 'Can I cancel anytime?',
-    a: 'Yes. Email us at contact.profx@gmail.com and we cancel from the next billing cycle. Your data stays accessible until your current period ends.',
+    a: 'Yes. Email us at support.profx@gmail.com and we cancel from the next billing cycle. Your data stays accessible until your current period ends.',
   },
 ];
 
@@ -261,8 +261,8 @@ export default function Landing() {
             <h2 className="section-title">Questions, answered.</h2>
             <p className="section-sub">
               Still curious? Email{' '}
-              <a href="mailto:contact.profx@gmail.com" className="mk-inline-link">
-                contact.profx@gmail.com
+              <a href="mailto:support.profx@gmail.com" className="mk-inline-link">
+                support.profx@gmail.com
               </a>
               .
             </p>

@@ -14,7 +14,7 @@ export default function Contact() {
     const body = encodeURIComponent(
       `${form.message}\n\n—\nFrom: ${form.name || 'Someone'} (${form.email || 'no email provided'})`
     );
-    window.location.href = `mailto:contact.profx@gmail.com?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:support.profx@gmail.com?subject=${subject}&body=${body}`;
     setSent(true);
   };
 
@@ -40,8 +40,8 @@ export default function Contact() {
               <div className="ct-info-icon">✉️</div>
               <div>
                 <h3>Email</h3>
-                <a href="mailto:contact.profx@gmail.com" className="ct-info-value">
-                  contact.profx@gmail.com
+                <a href="mailto:support.profx@gmail.com" className="ct-info-value">
+                  support.profx@gmail.com
                 </a>
                 <p>For product questions, billing, and support. We reply within one business day.</p>
               </div>
@@ -74,7 +74,7 @@ export default function Contact() {
             {sent && (
               <div className="ct-form-success">
                 ✓ Your email client should have opened with the message. If not, write to{' '}
-                <a href="mailto:contact.profx@gmail.com">contact.profx@gmail.com</a> directly.
+                <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a> directly.
               </div>
             )}
 
@@ -86,7 +86,7 @@ export default function Contact() {
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="Akshit"
+                    placeholder="Your name"
                   />
                 </div>
                 <div className="ct-form-group">

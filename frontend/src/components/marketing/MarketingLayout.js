@@ -7,7 +7,7 @@ import './MarketingLayout.css';
 function BrandLogo() {
   return (
     <Link to="/" className="mk-logo" aria-label="Profx home">
-      <Logo variant="lockup" size={32} />
+      <Logo variant="lockup" size={44} />
     </Link>
   );
 }
@@ -99,7 +99,7 @@ export default function MarketingLayout({ children }) {
             <div className="mk-footer-col">
               <h4>Company</h4>
               <Link to="/contact">Contact</Link>
-              <a href="mailto:contact.profx@gmail.com">Email us</a>
+              <a href="mailto:support.profx@gmail.com">Email us</a>
               <Link to="/signup">Create account</Link>
               <Link to="/login">Sign in</Link>
             </div>

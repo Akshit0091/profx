@@ -2,7 +2,7 @@ const { Resend } = require('resend');
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.FROM_EMAIL || 'noreply@profx.in';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'pathakakshit17@gmail.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
 
 const baseTemplate = (title, body) => `
 <!DOCTYPE html>

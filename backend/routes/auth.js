@@ -7,7 +7,7 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'pathakakshit17@gmail.com').toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase();
 
 const signToken = (userId) =>
   jwt.sign({ userId }, process.env.JWT_SECRET, {
