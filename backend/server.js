@@ -10,6 +10,7 @@ const uploadRoutes    = require('./routes/upload');
 const ordersRoutes    = require('./routes/orders');
 const dashboardRoutes = require('./routes/dashboard');
 const resetRoutes     = require('./routes/reset');
+const contactRoutes   = require('./routes/contact');
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use('/api/upload',    uploadRoutes);
 app.use('/api/orders',    ordersRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reset',     resetRoutes);
+app.use('/api/contact',   contactRoutes);
 
 // 404
 app.use((req, res) => {

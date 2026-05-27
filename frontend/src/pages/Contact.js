@@ -1,21 +1,48 @@
 import React, { useState } from 'react';
 import MarketingLayout from '../components/marketing/MarketingLayout';
+import api from '../utils/api';
 import './Contact.css';
 
 export default function Contact() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
-  const [sent, setSent] = useState(false);
+  const [status, setStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'error'
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // No backend endpoint for contact yet — open the user's mail client
-    // with a prefilled message. Most reliable, requires nothing extra.
-    const subject = encodeURIComponent(form.subject || 'ProfX enquiry');
-    const body = encodeURIComponent(
-      `${form.message}\n\n—\nFrom: ${form.name || 'Someone'} (${form.email || 'no email provided'})`
-    );
-    window.location.href = `mailto:support.profx@gmail.com?subject=${subject}&body=${body}`;
-    setSent(true);
+    if (status === 'sending') return;
+
+    // Client-side validation mirrors backend
+    if (!form.email || !form.message.trim()) {
+      setStatus('error');
+      setErrorMsg('Please fill in your email and message.');
+      return;
+    }
+    if (form.message.trim().length < 3) {
+      setStatus('error');
+      setErrorMsg('Please write a longer message.');
+      return;
+    }
+
+    setStatus('sending');
+    setErrorMsg('');
+
+    try {
+      await api.post('/contact', {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        subject: form.subject.trim(),
+        message: form.message.trim(),
+      });
+      setStatus('sent');
+      setForm({ name: '', email: '', subject: '', message: '' });
+    } catch (err) {
+      setStatus('error');
+      setErrorMsg(
+        err.response?.data?.error ||
+        'Could not send right now. Please email support.profx@gmail.com directly.'
+      );
+    }
   };
 
   return (
@@ -25,7 +52,7 @@ export default function Contact() {
           <span className="section-eyebrow">Contact</span>
           <h1>Let's talk.</h1>
           <p>
-            Questions about ProfX, a feature request, a billing issue, or just want to say hi?
+            Questions about Profx, a feature request, a billing issue, or just want to say hi?
             We read every message.
           </p>
         </div>
@@ -69,13 +96,17 @@ export default function Contact() {
 
           <div className="ct-form-card">
             <h2>Send us a message</h2>
-            <p className="ct-form-tag">We'll open your email client with the message prefilled — quickest way to keep a record on both sides.</p>
+            <p className="ct-form-tag">
+              We reply within one business day. Drop a note and we'll get back to you over email.
+            </p>
 
-            {sent && (
+            {status === 'sent' && (
               <div className="ct-form-success">
-                ✓ Your email client should have opened with the message. If not, write to{' '}
-                <a href="mailto:support.profx@gmail.com">support.profx@gmail.com</a> directly.
+                ✓ Message sent! We'll reply to your email within one business day.
               </div>
+            )}
+            {status === 'error' && errorMsg && (
+              <div className="ct-form-error">⚠ {errorMsg}</div>
             )}
 
             <form onSubmit={handleSubmit}>
@@ -87,15 +118,18 @@ export default function Contact() {
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="Your name"
+                    disabled={status === 'sending'}
                   />
                 </div>
                 <div className="ct-form-group">
-                  <label>Your email</label>
+                  <label>Your email *</label>
                   <input
                     type="email"
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder="you@example.com"
+                    disabled={status === 'sending'}
+                    required
                   />
                 </div>
               </div>
@@ -106,19 +140,26 @@ export default function Contact() {
                   value={form.subject}
                   onChange={(e) => setForm({ ...form, subject: e.target.value })}
                   placeholder="Billing question / Feature request / Bug report"
+                  disabled={status === 'sending'}
                 />
               </div>
               <div className="ct-form-group">
-                <label>Message</label>
+                <label>Message *</label>
                 <textarea
                   rows={6}
                   value={form.message}
                   onChange={(e) => setForm({ ...form, message: e.target.value })}
                   placeholder="What's on your mind?"
+                  disabled={status === 'sending'}
+                  required
                 />
               </div>
-              <button type="submit" className="mk-btn mk-btn-cta mk-btn-lg ct-submit">
-                Send message →
+              <button
+                type="submit"
+                className="mk-btn mk-btn-cta mk-btn-lg ct-submit"
+                disabled={status === 'sending'}
+              >
+                {status === 'sending' ? 'Sending…' : 'Send message →'}
               </button>
             </form>
           </div>

@@ -1,8 +1,9 @@
 const { Resend } = require('resend');
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const FROM = process.env.FROM_EMAIL || 'noreply@profx.in';
+const FROM = process.env.FROM_EMAIL || 'noreply@profx.website';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || ADMIN_EMAIL;
 
 const baseTemplate = (title, body) => `
 <!DOCTYPE html>
@@ -11,34 +12,69 @@ const baseTemplate = (title, body) => `
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
     <tr><td align="center">
       <table width="100%" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.06);">
-        <tr><td style="background:linear-gradient(135deg,#2563eb 0%,#059669 100%);padding:28px 32px;color:#fff;">
-          <div style="display:inline-block;background:rgba(255,255,255,0.18);padding:8px 14px;border-radius:10px;font-weight:700;letter-spacing:1px;">PX</div>
-          <h1 style="margin:14px 0 4px;font-size:22px;font-weight:700;color:#fff;">ProfX</h1>
+        <tr><td style="background:linear-gradient(135deg,#219BEF 0%,#0B4B9E 100%);padding:28px 32px;color:#fff;">
+          <h1 style="margin:0 0 4px;font-size:24px;font-weight:800;color:#fff;font-style:italic;letter-spacing:-0.5px;">Profx</h1>
           <p style="margin:0;font-size:13px;opacity:0.9;color:#fff;">Know exactly how much you earned today</p>
         </td></tr>
         <tr><td style="padding:32px;font-size:15px;line-height:1.6;color:#0f172a;">
           ${body}
         </td></tr>
         <tr><td style="padding:18px 32px;background:#f8fafc;color:#64748b;font-size:12px;text-align:center;">
-          &copy; ${new Date().getFullYear()} ProfX. All rights reserved.
+          &copy; ${new Date().getFullYear()} Profx. All rights reserved.
         </td></tr>
       </table>
     </td></tr>
   </table>
 </body></html>`;
 
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, replyTo }) {
   if (!resend) {
     console.log('[email skipped — no RESEND_API_KEY]', to, subject);
     return null;
   }
   try {
-    const res = await resend.emails.send({ from: FROM, to, subject, html });
+    const payload = { from: FROM, to, subject, html };
+    if (replyTo) payload.reply_to = replyTo;
+    const res = await resend.emails.send(payload);
     return res;
   } catch (err) {
     console.error('Resend error:', err.message || err);
     return null;
   }
+}
+
+// Sends a contact-form submission to the support inbox.
+// The Reply-To is set to the sender's email so you can hit Reply in Gmail
+// and respond to them directly without copying their address manually.
+async function sendContactFormEmail({ name, email, subject, message }) {
+  const safe = (s) => String(s || '').replace(/[<>]/g, '');
+  const cleanName    = safe(name).slice(0, 100)    || 'Anonymous';
+  const cleanEmail   = safe(email).slice(0, 200)   || '(no email provided)';
+  const cleanSubject = safe(subject).slice(0, 200) || 'New contact form submission';
+  const cleanMessage = safe(message).slice(0, 5000);
+  const messageHtml  = cleanMessage.replace(/\n/g, '<br>') || '<em>(no message)</em>';
+
+  const body = `
+    <h2 style="margin:0 0 12px;font-size:20px;">New contact form submission</h2>
+    <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin:14px 0;font-size:14px;">
+      <tr><td style="color:#64748b;width:90px;">From:</td><td><strong>${cleanName}</strong></td></tr>
+      <tr><td style="color:#64748b;">Email:</td><td><a href="mailto:${cleanEmail}">${cleanEmail}</a></td></tr>
+      <tr><td style="color:#64748b;">Subject:</td><td>${cleanSubject}</td></tr>
+    </table>
+    <div style="background:#f8fafc;border-left:3px solid #219BEF;padding:14px 18px;border-radius:0 8px 8px 0;margin:14px 0;font-size:14px;line-height:1.6;color:#0f172a;">
+      ${messageHtml}
+    </div>
+    <p style="margin-top:20px;color:#64748b;font-size:13px;">
+      Hit Reply on this email to respond directly to ${cleanName}.
+    </p>
+  `;
+
+  return sendEmail({
+    to: SUPPORT_EMAIL,
+    subject: `[Contact] ${cleanSubject}`,
+    html: baseTemplate('New contact submission', body),
+    replyTo: cleanEmail !== '(no email provided)' ? cleanEmail : undefined,
+  });
 }
 
 async function sendWelcomeEmail(user) {
@@ -108,4 +144,5 @@ module.exports = {
   sendPaymentFailedEmail,
   notifyAdminNewSeller,
   sendDeactivationEmail,
+  sendContactFormEmail,
 };

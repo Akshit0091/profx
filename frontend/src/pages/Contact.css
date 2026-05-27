@@ -161,3 +161,18 @@ a.ct-info-value:hover { text-decoration: underline; }
   .ct-form-card { padding: 28px 22px; }
   .ct-form-row { grid-template-columns: 1fr; }
 }
+
+.ct-form-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  color: #991b1b;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.ct-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
