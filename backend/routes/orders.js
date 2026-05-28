@@ -1,13 +1,13 @@
 const express = require('express');
 const XLSX = require('xlsx');
 const { PrismaClient } = require('@prisma/client');
-const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
+const { authMiddleware, subscriptionMiddleware, platformMiddleware } = require('../middleware/auth');
 const { matchOrdersForUser } = require('../utils/matcher');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-router.use(authMiddleware, subscriptionMiddleware);
+router.use(authMiddleware, subscriptionMiddleware, platformMiddleware);
 
 router.get('/', async (req, res) => {
   try {
@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
       limit = '50',
     } = req.query;
 
-    const where = { userId };
+    const where = { userId, platform: req.platform };
 
     // Starred toggle — independent of status, can combine with anything
     if (starred === 'true' || starred === '1') where.isStarred = true;
@@ -87,7 +87,7 @@ router.get('/export', async (req, res) => {
   try {
     const userId = req.user.id;
     const orders = await prisma.order.findMany({
-      where: { userId },
+      where: { userId, platform: req.platform },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -130,7 +130,7 @@ router.get('/export', async (req, res) => {
 
 router.delete('/all', async (req, res) => {
   try {
-    const result = await prisma.order.deleteMany({ where: { userId: req.user.id } });
+    const result = await prisma.order.deleteMany({ where: { userId: req.user.id, platform: req.platform } });
     res.json({ success: true, deleted: result.count });
   } catch (err) {
     console.error('Delete all orders error:', err);
@@ -142,7 +142,7 @@ router.delete('/all', async (req, res) => {
 // Useful after rule changes (e.g. returned orders → profit = settlement only).
 router.post('/recalc', async (req, res) => {
   try {
-    const result = await matchOrdersForUser(req.user.id);
+    const result = await matchOrdersForUser(req.user.id, req.platform);
     res.json({ success: true, ...result });
   } catch (err) {
     console.error('Recalc error:', err);
@@ -230,12 +230,13 @@ router.patch('/:id/settlement', async (req, res) => {
     // additively and the manual line stays in the sum.
     const manualHash = `manual:${order.orderItemId}`;
     await prisma.settlementEntry.deleteMany({
-      where: { userId: req.user.id, fileHash: manualHash },
+      where: { userId: req.user.id, platform: req.platform, fileHash: manualHash },
     });
     if (bankSettlement !== null) {
       await prisma.settlementEntry.create({
         data: {
           userId: req.user.id,
+          platform: req.platform,
           orderItemId: order.orderItemId,
           orderId: order.orderId,
           paymentDate: new Date(),
@@ -249,7 +250,7 @@ router.patch('/:id/settlement', async (req, res) => {
 
     // Recompute the order's settlement as SUM of all its entries
     const agg = await prisma.settlementEntry.aggregate({
-      where: { userId: req.user.id, orderItemId: order.orderItemId },
+      where: { userId: req.user.id, platform: req.platform, orderItemId: order.orderItemId },
       _sum: { bankSettlement: true },
     });
     const newSum = agg._sum.bankSettlement;
@@ -261,7 +262,7 @@ router.patch('/:id/settlement', async (req, res) => {
       },
     });
 
-    await matchOrdersForUser(req.user.id, [order.orderItemId]);
+    await matchOrdersForUser(req.user.id, req.platform, [order.orderItemId]);
     res.json({ success: true, newSettlement: newSum });
   } catch (err) {
     console.error('Edit-settlement error:', err);

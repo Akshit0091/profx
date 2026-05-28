@@ -79,4 +79,30 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
-module.exports = { authMiddleware, subscriptionMiddleware, adminMiddleware };
+// Resolves the active platform for a request and enforces access.
+// Reads platform from query (?platform=meesho) or header (x-platform),
+// defaults to "flipkart" for backward compatibility.
+// Sets req.platform. Rejects if the user doesn't own that platform.
+const { ALL_PLATFORMS, userHasPlatform } = require('../utils/platforms');
+
+const platformMiddleware = (req, res, next) => {
+  const raw =
+    (req.query && req.query.platform) ||
+    req.headers['x-platform'] ||
+    'flipkart';
+  const platform = String(raw).toLowerCase();
+
+  if (!ALL_PLATFORMS.includes(platform)) {
+    return res.status(400).json({ error: `Unknown platform: ${platform}` });
+  }
+  if (!userHasPlatform(req.user, platform)) {
+    return res.status(403).json({
+      error: `You don't have access to ${platform}. Upgrade your plan to unlock it.`,
+      code: 'PLATFORM_LOCKED',
+    });
+  }
+  req.platform = platform;
+  next();
+};
+
+module.exports = { authMiddleware, subscriptionMiddleware, adminMiddleware, platformMiddleware };

@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
+const { authMiddleware, subscriptionMiddleware, platformMiddleware } = require('../middleware/auth');
 const { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport } = require('../utils/fileParser');
 const { matchOrdersForUser } = require('../utils/matcher');
 
@@ -11,13 +11,14 @@ const prisma = new PrismaClient();
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-router.use(authMiddleware, subscriptionMiddleware);
+router.use(authMiddleware, subscriptionMiddleware, platformMiddleware);
 
 // ---------- PICKUP ----------
 router.post('/pickup', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const userId = req.user.id;
+    const platform = req.platform;
     const rows = parsePickupReport(req.file.buffer);
 
     let inserted = 0;
@@ -27,7 +28,7 @@ router.post('/pickup', upload.single('file'), async (req, res) => {
     for (const row of rows) {
       if (!row.orderItemId) continue;
       const existing = await prisma.order.findUnique({
-        where: { orderItemId_userId: { orderItemId: row.orderItemId, userId } },
+        where: { orderItemId_userId_platform: { orderItemId: row.orderItemId, userId, platform } },
       });
 
       if (existing) {
@@ -53,6 +54,7 @@ router.post('/pickup', upload.single('file'), async (req, res) => {
             hasPickup: true,
             hasSettlement: false,
             isMatched: false,
+            platform,
             userId,
           },
         });
@@ -61,7 +63,7 @@ router.post('/pickup', upload.single('file'), async (req, res) => {
       touchedIds.push(row.orderItemId);
     }
 
-    const matchResult = await matchOrdersForUser(userId, touchedIds);
+    const matchResult = await matchOrdersForUser(userId, platform, touchedIds);
     res.json({
       success: true,
       type: 'pickup',
@@ -86,12 +88,13 @@ router.post('/settlement', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const userId = req.user.id;
+    const platform = req.platform;
     const rows = parseSettlementReport(req.file.buffer);
     const fileHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
     const fileName = req.file.originalname || null;
 
     // Wipe prior contribution from this exact file
-    await prisma.settlementEntry.deleteMany({ where: { userId, fileHash } });
+    await prisma.settlementEntry.deleteMany({ where: { userId, platform, fileHash } });
 
     // Insert fresh entries; collect touched orderItemIds
     const touched = new Set();
@@ -101,6 +104,7 @@ router.post('/settlement', upload.single('file'), async (req, res) => {
       if (row.bankSettlement === null || row.bankSettlement === undefined) return;
       entries.push({
         userId,
+        platform,
         orderItemId: row.orderItemId,
         orderId: row.orderId || null,
         paymentDate: row.paymentDate || null,
@@ -122,7 +126,7 @@ router.post('/settlement', upload.single('file'), async (req, res) => {
 
     for (const orderItemId of touched) {
       const existing = await prisma.order.findUnique({
-        where: { orderItemId_userId: { orderItemId, userId } },
+        where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
       });
       if (!existing) {
         skipped++;
@@ -132,14 +136,14 @@ router.post('/settlement', upload.single('file'), async (req, res) => {
 
       // Sum across ALL entries (this file + any previous files)
       const agg = await prisma.settlementEntry.aggregate({
-        where: { userId, orderItemId },
+        where: { userId, platform, orderItemId },
         _sum: { bankSettlement: true },
         _max: { paymentDate: true },
       });
 
       // Latest non-null orderId from any entry
       const latest = await prisma.settlementEntry.findFirst({
-        where: { userId, orderItemId, orderId: { not: null } },
+        where: { userId, platform, orderItemId, orderId: { not: null } },
         orderBy: { createdAt: 'desc' },
         select: { orderId: true },
       });
@@ -156,7 +160,7 @@ router.post('/settlement', upload.single('file'), async (req, res) => {
       updated++;
     }
 
-    const matchResult = await matchOrdersForUser(userId, Array.from(touched));
+    const matchResult = await matchOrdersForUser(userId, platform, Array.from(touched));
     res.json({
       success: true,
       type: 'settlement',
@@ -180,6 +184,7 @@ router.post('/returns', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const userId = req.user.id;
+    const platform = req.platform;
     const trackingIds = parseReturnReport(req.file.buffer);
 
     let marked = 0;
@@ -188,7 +193,7 @@ router.post('/returns', upload.single('file'), async (req, res) => {
 
     for (const tid of trackingIds) {
       if (!tid) continue;
-      const orders = await prisma.order.findMany({ where: { userId, trackingId: tid } });
+      const orders = await prisma.order.findMany({ where: { userId, platform, trackingId: tid } });
       if (!orders.length) {
         notFound.push(tid);
         continue;
@@ -209,7 +214,7 @@ router.post('/returns', upload.single('file'), async (req, res) => {
     }
 
     // Recompute profit from current settlement values (no zero-out anymore)
-    await matchOrdersForUser(userId, touchedIds);
+    await matchOrdersForUser(userId, platform, touchedIds);
 
     res.json({
       success: true,
@@ -230,6 +235,7 @@ router.post('/return-incoming', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const userId = req.user.id;
+    const platform = req.platform;
     const rows = parseReturnIncomingReport(req.file.buffer);
 
     let marked = 0;
@@ -241,12 +247,12 @@ router.post('/return-incoming', upload.single('file'), async (req, res) => {
       let order = null;
       if (row.orderItemId) {
         order = await prisma.order.findUnique({
-          where: { orderItemId_userId: { orderItemId: row.orderItemId, userId } },
+          where: { orderItemId_userId_platform: { orderItemId: row.orderItemId, userId, platform } },
         });
       }
       if (!order && row.trackingId) {
         const matches = await prisma.order.findMany({
-          where: { userId, trackingId: row.trackingId },
+          where: { userId, platform, trackingId: row.trackingId },
         });
         if (matches.length === 1) order = matches[0];
       }
@@ -295,7 +301,7 @@ router.post('/undo-return', async (req, res) => {
     if (!trackingId) return res.status(400).json({ error: 'trackingId is required' });
 
     const orders = await prisma.order.findMany({
-      where: { userId: req.user.id, trackingId, isReturned: true },
+      where: { userId: req.user.id, platform: req.platform, trackingId, isReturned: true },
     });
     if (!orders.length) return res.status(404).json({ error: 'No returned orders found for this tracking ID' });
 
@@ -305,7 +311,7 @@ router.post('/undo-return', async (req, res) => {
         data: { isReturned: false, returnDate: null },
       });
     }
-    await matchOrdersForUser(req.user.id, orders.map((o) => o.orderItemId));
+    await matchOrdersForUser(req.user.id, req.platform, orders.map((o) => o.orderItemId));
     res.json({ success: true, undone: orders.length });
   } catch (err) {
     console.error('Undo return error:', err);

@@ -2,8 +2,8 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 /**
- * Profit rule:
- *   Effectively returned (item back / Flipkart paid nothing or charged us back):
+ * Profit rule (shared across all platforms — Flipkart, Meesho, Amazon):
+ *   Effectively returned (item back / platform paid nothing or charged us back):
  *     - isReturned = true,  OR
  *     - bankSettlement <= 0
  *   → profit = bankSettlement  (no cost subtracted — inventory considered recovered)
@@ -11,32 +11,33 @@ const prisma = new PrismaClient();
  *   Otherwise (normal sale):
  *   → profit = bankSettlement - purchasePrice
  *
- * "Return Incoming" is NOT auto-treated as returned — the parcel could still
- * be lost in transit. Profit flips only when isReturned becomes true OR
- * when the settlement value is non-positive (Flipkart never paid us, or took
- * money back, which always indicates a return in practice).
+ * This rule works identically for Meesho:
+ *   - RTO:    settlement 0  → profit 0       (item returned, kept inventory, no fee)
+ *   - Return: settlement <0 → profit = that  (item returned, kept inventory, paid reverse fee)
+ *   - Delivered: settlement - cost
  */
 function computeProfit(order, cost) {
   const settlement = order.bankSettlement;
   if (settlement === null || settlement === undefined) return null;
-  // Treat zero/negative settlement OR explicit return flag as "effectively returned"
   if (order.isReturned || settlement <= 0) return settlement;
   if (cost === null || cost === undefined) return null;
   return settlement - cost;
 }
 
 /**
- * After uploading pickup or settlement data, re-check each order for the user
- * and set isMatched + profit. Returned orders also get recomputed.
+ * Re-check each order for the user+platform and set isMatched + profit.
+ * @param {string} userId
+ * @param {string} platform  e.g. "flipkart" | "meesho" | "amazon"
+ * @param {string[]|null} orderItemIds  optional subset to limit recompute
  */
-async function matchOrdersForUser(userId, orderItemIds = null) {
-  const whereClause = { userId };
+async function matchOrdersForUser(userId, platform = 'flipkart', orderItemIds = null) {
+  const whereClause = { userId, platform };
   if (orderItemIds && orderItemIds.length) whereClause.orderItemId = { in: orderItemIds };
 
   const orders = await prisma.order.findMany({ where: whereClause });
 
-  // Preload SKU prices once
-  const skuList = await prisma.sKU.findMany({ where: { userId } });
+  // Preload SKU prices once, scoped to this platform
+  const skuList = await prisma.sKU.findMany({ where: { userId, platform } });
   const priceMap = new Map(skuList.map((s) => [s.skuId, s.purchasePrice]));
 
   const updates = [];
@@ -47,11 +48,7 @@ async function matchOrdersForUser(userId, orderItemIds = null) {
       updates.push(
         prisma.order.update({
           where: { id: o.id },
-          data: {
-            isMatched: true,
-            purchasePrice: cost,
-            profit,
-          },
+          data: { isMatched: true, purchasePrice: cost, profit },
         })
       );
     } else if (o.isMatched) {
@@ -69,19 +66,17 @@ async function matchOrdersForUser(userId, orderItemIds = null) {
 }
 
 /**
- * Recalculate profit for every matched order for a single SKU.
+ * Recalculate profit for every matched order for a single SKU on a platform.
  * Called whenever a SKU's purchase price is added or updated.
- * Returned orders are recomputed too (their profit doesn't depend on cost,
- * but we keep purchasePrice in sync for reporting).
  */
-async function recalcProfitsForSku(userId, skuId) {
+async function recalcProfitsForSku(userId, platform, skuId) {
   const skuRow = await prisma.sKU.findUnique({
-    where: { skuId_userId: { skuId, userId } },
+    where: { skuId_userId_platform: { skuId, userId, platform } },
   });
   if (!skuRow) return { updated: 0 };
 
   const orders = await prisma.order.findMany({
-    where: { userId, skuId, hasPickup: true, hasSettlement: true },
+    where: { userId, platform, skuId, hasPickup: true, hasSettlement: true },
   });
 
   const updates = orders.map((o) =>

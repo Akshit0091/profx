@@ -29,6 +29,7 @@ router.post('/signup', async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const isAdmin = lowerEmail === ADMIN_EMAIL;
+    const { ALL_PLATFORMS } = require('../utils/platforms');
     const user = await prisma.user.create({
       data: {
         email: lowerEmail,
@@ -37,6 +38,9 @@ router.post('/signup', async (req, res) => {
         phone: phone || null,
         isAdmin,
         isActive: isAdmin, // admin auto-active
+        // Phase 1: default new sellers to Flipkart. Plan selection UI comes in Phase 2.
+        // Admins get all platforms.
+        plans: isAdmin ? ALL_PLATFORMS : ['flipkart'],
       },
     });
 
@@ -74,6 +78,7 @@ router.post('/signup', async (req, res) => {
         phone: user.phone,
         isAdmin: user.isAdmin,
         isActive: user.isActive,
+        plans: user.plans || [],
       },
     });
   } catch (err) {
@@ -107,6 +112,7 @@ router.post('/login', async (req, res) => {
         phone: user.phone,
         isAdmin: user.isAdmin,
         isActive: user.isActive,
+        plans: user.plans || [],
         subscription: user.subscription
           ? {
               status: user.subscription.status,
@@ -131,6 +137,7 @@ router.get('/me', authMiddleware, async (req, res) => {
       phone: u.phone,
       isAdmin: u.isAdmin,
       isActive: u.isActive,
+      plans: u.plans || [],
       subscription: u.subscription
         ? {
             status: u.subscription.status,

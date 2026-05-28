@@ -1,11 +1,11 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
+const { authMiddleware, subscriptionMiddleware, platformMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-router.use(authMiddleware, subscriptionMiddleware);
+router.use(authMiddleware, subscriptionMiddleware, platformMiddleware);
 
 // Resolve { startDate, endDate } from query params.
 // Priority: explicit startDate/endDate > month (YYYY-MM) > days fallback.
@@ -52,6 +52,7 @@ function dateKey(d) {
 router.get('/summary', async (req, res) => {
   try {
     const userId = req.user.id;
+    const platform = req.platform;
     const { start, end } = resolveRange(req.query);
 
     // Range filter on dispatchDate. Returned orders are INCLUDED so their
@@ -59,20 +60,20 @@ router.get('/summary', async (req, res) => {
     const dispatchFilter = { gte: start, lte: end };
 
     const [totalOrders, matchedOrders, returnedOrders, returnIncomingOrders, pendingOrders, matchedRows, lossCount, profitCount] = await Promise.all([
-      prisma.order.count({ where: { userId, dispatchDate: dispatchFilter } }),
-      prisma.order.count({ where: { userId, isMatched: true, dispatchDate: dispatchFilter } }),
-      prisma.order.count({ where: { userId, isReturned: true, dispatchDate: dispatchFilter } }),
-      prisma.order.count({ where: { userId, returnIncoming: true, isReturned: false, dispatchDate: dispatchFilter } }),
-      prisma.order.count({ where: { userId, isMatched: false, dispatchDate: dispatchFilter } }),
+      prisma.order.count({ where: { userId, platform, dispatchDate: dispatchFilter } }),
+      prisma.order.count({ where: { userId, platform, isMatched: true, dispatchDate: dispatchFilter } }),
+      prisma.order.count({ where: { userId, platform, isReturned: true, dispatchDate: dispatchFilter } }),
+      prisma.order.count({ where: { userId, platform, returnIncoming: true, isReturned: false, dispatchDate: dispatchFilter } }),
+      prisma.order.count({ where: { userId, platform, isMatched: false, dispatchDate: dispatchFilter } }),
       prisma.order.findMany({
-        where: { userId, isMatched: true, dispatchDate: dispatchFilter },
+        where: { userId, platform, isMatched: true, dispatchDate: dispatchFilter },
         select: { bankSettlement: true, purchasePrice: true, profit: true },
       }),
       prisma.order.count({
-        where: { userId, isMatched: true, dispatchDate: dispatchFilter, profit: { lt: 0 } },
+        where: { userId, platform, isMatched: true, dispatchDate: dispatchFilter, profit: { lt: 0 } },
       }),
       prisma.order.count({
-        where: { userId, isMatched: true, dispatchDate: dispatchFilter, profit: { gt: 0 } },
+        where: { userId, platform, isMatched: true, dispatchDate: dispatchFilter, profit: { gt: 0 } },
       }),
     ]);
 
@@ -110,11 +111,13 @@ router.get('/summary', async (req, res) => {
 router.get('/chart/profit', async (req, res) => {
   try {
     const userId = req.user.id;
+    const platform = req.platform;
     const { start, end } = resolveRange(req.query);
 
     const orders = await prisma.order.findMany({
       where: {
         userId,
+        platform,
         isMatched: true,
         dispatchDate: { gte: start, lte: end },
       },
@@ -149,10 +152,11 @@ router.get('/chart/profit', async (req, res) => {
 router.get('/chart/orders', async (req, res) => {
   try {
     const userId = req.user.id;
+    const platform = req.platform;
     const { start, end } = resolveRange(req.query);
 
     const orders = await prisma.order.findMany({
-      where: { userId, dispatchDate: { gte: start, lte: end } },
+      where: { userId, platform, dispatchDate: { gte: start, lte: end } },
       select: { dispatchDate: true, isMatched: true, isReturned: true, returnIncoming: true },
     });
 

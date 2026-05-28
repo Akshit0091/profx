@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { PrismaClient } = require('@prisma/client');
-const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
+const { authMiddleware, subscriptionMiddleware, platformMiddleware } = require('../middleware/auth');
 const { recalcProfitsForSku } = require('../utils/matcher');
 const { stripApostrophe } = require('../utils/fileParser');
 
@@ -10,12 +10,12 @@ const router = express.Router();
 const prisma = new PrismaClient();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-router.use(authMiddleware, subscriptionMiddleware);
+router.use(authMiddleware, subscriptionMiddleware, platformMiddleware);
 
 router.get('/', async (req, res) => {
   try {
     const { search = '' } = req.query;
-    const where = { userId: req.user.id };
+    const where = { userId: req.user.id, platform: req.platform };
     if (search) where.skuId = { contains: String(search), mode: 'insensitive' };
     const skus = await prisma.sKU.findMany({ where, orderBy: { skuId: 'asc' } });
     res.json({ skus });
@@ -30,11 +30,14 @@ router.get('/missing', async (req, res) => {
   try {
     const userId = req.user.id;
     const orderSkus = await prisma.order.findMany({
-      where: { userId, skuId: { not: null } },
+      where: { userId, platform: req.platform, skuId: { not: null } },
       select: { skuId: true },
       distinct: ['skuId'],
     });
-    const existing = await prisma.sKU.findMany({ where: { userId }, select: { skuId: true } });
+    const existing = await prisma.sKU.findMany({
+      where: { userId, platform: req.platform },
+      select: { skuId: true },
+    });
     const have = new Set(existing.map((s) => s.skuId));
     const missing = orderSkus
       .map((o) => o.skuId)
@@ -57,12 +60,12 @@ router.post('/', async (req, res) => {
 
     const cleanSku = String(skuId).trim();
     const sku = await prisma.sKU.upsert({
-      where: { skuId_userId: { skuId: cleanSku, userId: req.user.id } },
-      create: { skuId: cleanSku, purchasePrice: price, userId: req.user.id },
+      where: { skuId_userId_platform: { skuId: cleanSku, userId: req.user.id, platform: req.platform } },
+      create: { skuId: cleanSku, purchasePrice: price, userId: req.user.id, platform: req.platform },
       update: { purchasePrice: price },
     });
 
-    const recalc = await recalcProfitsForSku(req.user.id, cleanSku);
+    const recalc = await recalcProfitsForSku(req.user.id, req.platform, cleanSku);
     res.json({ success: true, sku, recalculated: recalc.updated });
   } catch (err) {
     console.error('SKU upsert error:', err);
@@ -84,7 +87,7 @@ router.put('/:id', async (req, res) => {
       where: { id: req.params.id },
       data: { purchasePrice: price },
     });
-    const recalc = await recalcProfitsForSku(req.user.id, sku.skuId);
+    const recalc = await recalcProfitsForSku(req.user.id, sku.platform, sku.skuId);
     res.json({ success: true, sku, recalculated: recalc.updated });
   } catch (err) {
     console.error('SKU update error:', err);
@@ -99,9 +102,9 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'SKU not found' });
     }
     await prisma.sKU.delete({ where: { id: req.params.id } });
-    // Wipe profit/purchasePrice on linked orders so they go back to pending matched-but-no-cost state
+    // Wipe profit/purchasePrice on linked orders (same platform) so they revert
     await prisma.order.updateMany({
-      where: { userId: req.user.id, skuId: existing.skuId, isReturned: false },
+      where: { userId: req.user.id, platform: existing.platform, skuId: existing.skuId, isReturned: false },
       data: { profit: null, purchasePrice: null, isMatched: false },
     });
     res.json({ success: true });
@@ -146,19 +149,19 @@ router.post('/bulk', upload.single('file'), async (req, res) => {
       if (!skuId || isNaN(price)) continue;
 
       const existing = await prisma.sKU.findUnique({
-        where: { skuId_userId: { skuId, userId: req.user.id } },
+        where: { skuId_userId_platform: { skuId, userId: req.user.id, platform: req.platform } },
       });
       if (existing) {
         await prisma.sKU.update({ where: { id: existing.id }, data: { purchasePrice: price } });
         updated++;
       } else {
-        await prisma.sKU.create({ data: { skuId, purchasePrice: price, userId: req.user.id } });
+        await prisma.sKU.create({ data: { skuId, purchasePrice: price, userId: req.user.id, platform: req.platform } });
         inserted++;
       }
       touchedSkus.push(skuId);
     }
 
-    for (const s of touchedSkus) await recalcProfitsForSku(req.user.id, s);
+    for (const s of touchedSkus) await recalcProfitsForSku(req.user.id, req.platform, s);
 
     res.json({ success: true, inserted, updated, total: rows.length });
   } catch (err) {

@@ -18,6 +18,10 @@ model User {
   isActive     Boolean       @default(false)
   createdAt    DateTime      @default(now())
 
+  // Which marketplaces this user has access to.
+  // Values: "flipkart", "meesho", "amazon". Existing users backfill to ["flipkart"].
+  plans        String[]      @default([])
+
   subscription Subscription?
   skus         SKU[]
   orders       Order[]
@@ -49,13 +53,18 @@ model SKU {
   skuId         String
   purchasePrice Float
 
+  // Which marketplace this SKU price belongs to. Same physical product may be
+  // listed at different prices per platform, so price is scoped per platform.
+  platform      String   @default("flipkart")
+
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  @@unique([skuId, userId])
+  @@unique([skuId, userId, platform])
+  @@index([userId, platform])
 }
 
 model Order {
@@ -63,6 +72,9 @@ model Order {
   orderItemId    String
   orderId        String?
   skuId          String?
+
+  // Which marketplace this order is from. Default flipkart for existing data.
+  platform       String    @default("flipkart")
 
   dispatchDate   DateTime?
   bankSettlement Float?
@@ -80,6 +92,10 @@ model Order {
   isReturned     Boolean   @default(false)
   returnDate     DateTime?
 
+  // Distinguishes return sub-types. For Flipkart: null or "returned".
+  // For Meesho: "rto" (never delivered, settlement 0) vs "return" (came back, reverse fee).
+  returnType            String?
+
   returnIncoming        Boolean   @default(false)
   returnRequestedDate   DateTime?
   returnReason          String?
@@ -95,8 +111,8 @@ model Order {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([orderItemId, userId])
-  @@index([userId])
+  @@unique([orderItemId, userId, platform])
+  @@index([userId, platform])
   @@index([trackingId])
   @@index([skuId])
 }
@@ -114,6 +130,8 @@ model SettlementEntry {
   userId         String
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  platform       String    @default("flipkart")
+
   orderItemId    String
   orderId        String?
   paymentDate    DateTime?
@@ -125,6 +143,6 @@ model SettlementEntry {
 
   createdAt      DateTime  @default(now())
 
-  @@index([userId, orderItemId])
+  @@index([userId, platform, orderItemId])
   @@index([userId, fileHash])
 }
