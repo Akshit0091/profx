@@ -96,6 +96,7 @@ router.get('/sellers', async (req, res) => {
         name: s.name,
         phone: s.phone,
         isActive: s.isActive,
+        plans: s.plans || [],
         createdAt: s.createdAt,
         subscription: s.subscription,
         orderCount: s._count.orders,
@@ -186,6 +187,27 @@ router.delete('/sellers/:id', async (req, res) => {
   } catch (err) {
     console.error('Delete seller error:', err);
     res.status(500).json({ error: 'Failed to delete seller' });
+  }
+});
+
+// Set which platforms a seller has access to.
+// Body: { plans: ["flipkart","meesho",...] }  — replaces the seller's plans array.
+const { sanitizePlans } = require('../utils/platforms');
+router.post('/sellers/:id/plans', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user) return res.status(404).json({ error: 'Seller not found' });
+    if (user.isAdmin) return res.status(400).json({ error: 'Admins already have all platforms' });
+
+    const plans = sanitizePlans(req.body?.plans);
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { plans },
+    });
+    res.json({ success: true, plans: updated.plans });
+  } catch (err) {
+    console.error('Set seller plans error:', err);
+    res.status(500).json({ error: 'Failed to update seller platforms' });
   }
 });
 

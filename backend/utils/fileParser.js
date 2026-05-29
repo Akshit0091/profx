@@ -209,4 +209,83 @@ function parseReturnIncomingReport(buffer) {
   return result;
 }
 
-module.exports = { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, stripApostrophe };
+// ---------- MEESHO PAYMENT (Excel, "Order Payments" sheet) ----------
+// One file per payout containing pickup + settlement + returns together.
+// Layout (verified against real file):
+//   Row 1 = group headers (skip), Row 2 = column headers, Row 3 = formula legend (skip),
+//   Row 4+ = data. Headers are read by name so column order can't break us.
+// Columns used (of 43): Sub Order No, Dispatch Date, Supplier SKU, Live Order Status,
+//   Payment Date, Final Settlement Amount.
+// Status → return mapping:
+//   "Delivered"      → isReturned=false, returnType=null   (settlement positive)
+//   "RTO"            → isReturned=true,  returnType="rto"   (settlement 0)
+//   "Return"         → isReturned=true,  returnType="return"(settlement negative — reverse shipping)
+//   ""/unknown       → treated as Delivered (a paid order with blank status must not be flagged)
+function parseMeeshoPayment(buffer) {
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false, raw: true });
+
+  // Find the "Order Payments" sheet (case-insensitive); fall back to first sheet.
+  const sheetName =
+    workbook.SheetNames.find((n) => n.trim().toLowerCase() === 'order payments') ||
+    workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  // Row 2 (1-indexed) holds the real headers → range starts there so keys are clean.
+  // header:1 gives us positional rows; we locate columns by header name on the header row.
+  const arr = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  if (arr.length < 4) return [];
+
+  // arr[1] = row 2 = headers
+  const headers = (arr[1] || []).map((h) => String(h).trim().toLowerCase());
+  const colOf = (...candidates) => {
+    for (const c of candidates) {
+      const idx = headers.indexOf(c.toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  const cSub      = colOf('sub order no', 'sub order no.', 'suborderno');
+  const cDispatch = colOf('dispatch date');
+  const cSku      = colOf('supplier sku', 'supplier sku id');
+  const cStatus   = colOf('live order status', 'order status');
+  const cPayDate  = colOf('payment date');
+  const cSettle   = colOf('final settlement amount');
+
+  const result = [];
+  // Data starts at row 4 → index 3. (Row 3 / index 2 is the formula legend.)
+  for (let i = 3; i < arr.length; i++) {
+    const row = arr[i] || [];
+    const orderItemId = cSub !== -1 ? stripApostrophe(row[cSub]) : '';
+    if (!orderItemId) continue; // skip blank / sub-note rows defensively
+
+    const rawStatus = cStatus !== -1 ? String(row[cStatus] || '').trim() : '';
+    const status = rawStatus.toLowerCase();
+
+    let isReturned = false;
+    let returnType = null;
+    if (status === 'rto') {
+      isReturned = true;
+      returnType = 'rto';
+    } else if (status === 'return') {
+      isReturned = true;
+      returnType = 'return';
+    }
+    // "delivered", "" and anything unrecognized → delivered (isReturned=false, returnType=null)
+
+    result.push({
+      orderItemId,
+      skuId:          cSku      !== -1 ? stripApostrophe(row[cSku])      : null,
+      dispatchDate:   cDispatch !== -1 ? parseDate(row[cDispatch])       : null,
+      paymentDate:    cPayDate  !== -1 ? parseDate(row[cPayDate])        : null,
+      bankSettlement: cSettle   !== -1 ? parseNumber(row[cSettle])       : null,
+      status:         rawStatus || null,
+      isReturned,
+      returnType,
+    });
+  }
+  return result;
+}
+
+module.exports = { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, parseMeeshoPayment, stripApostrophe };

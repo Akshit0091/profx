@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../utils/AuthContext';
 import Logo from '../Logo';
+import { useActivePlatform, PLATFORM_META } from '../../utils/platforms';
 import './Layout.css';
 
 export default function Layout({ children }) {
@@ -9,6 +10,7 @@ export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { platform, switchPlatform, allowed } = useActivePlatform(user);
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
@@ -46,6 +48,33 @@ export default function Layout({ children }) {
             {collapsed ? '›' : '‹'}
           </button>
         </div>
+
+        {/* Platform switcher — only shown when the user owns more than one platform */}
+        {allowed.length > 1 && (
+          <div className={`platform-switcher ${collapsed ? 'is-collapsed' : ''}`}>
+            {!collapsed && <div className="platform-switcher-label">Marketplace</div>}
+            <div className="platform-pills">
+              {allowed.map((p) => {
+                const meta = PLATFORM_META[p];
+                const active = p === platform;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`platform-pill ${active ? 'is-active' : ''}`}
+                    style={active ? { borderColor: meta.color, color: meta.color } : undefined}
+                    onClick={() => !active && switchPlatform(p)}
+                    title={meta.label}
+                    aria-label={meta.label}
+                  >
+                    <img className="platform-pill-icon" src={meta.logo} alt="" />
+                    {!collapsed && <span className="platform-pill-label">{meta.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <nav className="sidenav">
           {!collapsed && <div className="nav-section">Workspace</div>}

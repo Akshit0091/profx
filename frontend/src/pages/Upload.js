@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
 import api from '../utils/api';
+import { useAuth } from '../utils/AuthContext';
+import { useActivePlatform } from '../utils/platforms';
 import './Upload.css';
 
 function UploadZone({ title, accept, description, color, endpoint, onResult }) {
@@ -52,7 +54,15 @@ function UploadZone({ title, accept, description, color, endpoint, onResult }) {
       {error && <div className="upload-error">{error}</div>}
       {result && (
         <div className="upload-result">
-          {result.type === 'returns' ? (
+          {result.type === 'meesho-payment' ? (
+            <>
+              <div>Processed: <strong>{result.processed}</strong></div>
+              <div>Inserted: <strong>{result.inserted}</strong></div>
+              <div>Updated: <strong>{result.updated}</strong></div>
+              <div>Returns (RTO + Return): <strong>{result.returns}</strong></div>
+              <div>Matched: <strong>{result.matched}</strong></div>
+            </>
+          ) : result.type === 'returns' ? (
             <>
               <div>Tracking IDs found: <strong>{result.trackingIdsFound}</strong></div>
               <div>Orders marked returned: <strong>{result.ordersMarked}</strong></div>
@@ -107,75 +117,121 @@ function UploadZone({ title, accept, description, color, endpoint, onResult }) {
 
 export default function Upload() {
   const [refreshTick, setRefreshTick] = useState(0);
+  // NOTE: adjust this if your auth exposes `user` differently (e.g. useAuth()).
+  const { user } = useAuth();
+  const { platform } = useActivePlatform(user);
+  const isMeesho = platform === 'meesho';
+
   return (
     <div className="upload-page">
       <div className="page-head">
         <div>
           <h1>Upload Reports</h1>
-          <p className="text-muted">Upload Flipkart pickup, settlement, and return reports.</p>
+          <p className="text-muted">
+            {isMeesho
+              ? 'Upload your Meesho payment file — one file contains everything.'
+              : 'Upload Flipkart pickup, settlement, and return reports.'}
+          </p>
         </div>
       </div>
 
-      <div className="card how-card">
-        <h3>How it works</h3>
-        <div className="steps">
-          <div><span>1</span> Upload <strong>Pickup CSV</strong> from Flipkart Seller Hub.</div>
-          <div><span>2</span> Upload <strong>Settlement Excel</strong> — only the <em>Orders</em> sheet is read.</div>
-          <div><span>3</span> Orders matched by <strong>Order Item ID</strong> automatically.</div>
-          <div><span>4</span> Upload <strong>Return on the way</strong> to mark incoming returns.</div>
-          <div><span>5</span> Upload <strong>Return Received</strong> when the parcel physically reaches you.</div>
-        </div>
-      </div>
+      {isMeesho ? (
+        <>
+          <div className="card how-card">
+            <h3>How it works</h3>
+            <div className="steps">
+              <div><span>1</span> Download your <strong>Payment file</strong> from Meesho Supplier Panel.</div>
+              <div><span>2</span> Drop the <strong>XLSX</strong> below — the <em>Order Payments</em> sheet is read.</div>
+              <div><span>3</span> Orders, settlements, RTOs and returns are imported in one pass.</div>
+              <div><span>4</span> Profit is computed automatically from the final settlement amount.</div>
+            </div>
+          </div>
 
-      <div className="upload-grid">
-        <UploadZone
-          title="Pickup Report"
-          description="CSV — needs columns: ORDER ITEM ID, Order Id, SKU, Dispatch by date, Tracking ID"
-          accept=".csv,text/csv"
-          color="blue"
-          endpoint="/upload/pickup"
-          onResult={() => setRefreshTick((x) => x + 1)}
-        />
-        <UploadZone
-          title="Settlement Report"
-          description="Excel — reads only the Orders sheet. Multiple rows per Order Item ID are summed."
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          color="blue"
-          endpoint="/upload/settlement"
-          onResult={() => setRefreshTick((x) => x + 1)}
-        />
-        <UploadZone
-          title="Return on the way"
-          description="CSV / Excel — full Flipkart returns-in-transit file. Matched by Order Item ID."
-          accept="*"
-          color="orange"
-          endpoint="/upload/return-incoming"
-          onResult={() => setRefreshTick((x) => x + 1)}
-        />
-        <UploadZone
-          title="Return Received"
-          description="CSV / Excel — single column of Tracking IDs for parcels physically back with you."
-          accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          color="yellow"
-          endpoint="/upload/returns"
-          onResult={() => setRefreshTick((x) => x + 1)}
-        />
-      </div>
+          <div className="upload-grid">
+            <UploadZone
+              title="Meesho Payment File"
+              description="XLSX — single payout file. Reads the Order Payments sheet (Sub Order No, Dispatch Date, Supplier SKU, Live Order Status, Payment Date, Final Settlement Amount)."
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              color="purple"
+              endpoint="/upload/meesho-payment"
+              onResult={() => setRefreshTick((x) => x + 1)}
+            />
+          </div>
 
-      <div className="card hint-card">
-        <strong>💡 Return file formats</strong>
-        <p>
-          <strong>Return on the way</strong> — Flipkart's returns-in-transit CSV with rich metadata.
-          Matched primarily by <code>Order Item ID</code>; falls back to <code>Tracking ID</code>.
-          Marks orders as <em>Return Incoming</em> but keeps profit untouched until the parcel is received.
-        </p>
-        <p>
-          <strong>Return Received</strong> — single column of Tracking IDs (header: <code>Tracking ID</code>,
-          <code>TrackingID</code>, <code>tracking_id</code>, or unnamed). Marks orders as fully returned.
-          Profit is recomputed from whatever settlement Flipkart actually paid (it may be negative if
-          they've charged reverse shipping).
-        </p>
-      </div>
+          <div className="card hint-card">
+            <strong>💡 One file does it all</strong>
+            <p>
+              Meesho bundles pickup, settlement, and returns into a single payout file, so there's
+              just one drop zone. <strong>RTO</strong> rows settle to ₹0; <strong>Return</strong> rows
+              can be negative (reverse shipping). Both are flagged automatically and profit is taken
+              straight from the <code>Final Settlement Amount</code>.
+            </p>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="card how-card">
+            <h3>How it works</h3>
+            <div className="steps">
+              <div><span>1</span> Upload <strong>Pickup CSV</strong> from Flipkart Seller Hub.</div>
+              <div><span>2</span> Upload <strong>Settlement Excel</strong> — only the <em>Orders</em> sheet is read.</div>
+              <div><span>3</span> Orders matched by <strong>Order Item ID</strong> automatically.</div>
+              <div><span>4</span> Upload <strong>Return on the way</strong> to mark incoming returns.</div>
+              <div><span>5</span> Upload <strong>Return Received</strong> when the parcel physically reaches you.</div>
+            </div>
+          </div>
+
+          <div className="upload-grid">
+            <UploadZone
+              title="Pickup Report"
+              description="CSV — needs columns: ORDER ITEM ID, Order Id, SKU, Dispatch by date, Tracking ID"
+              accept=".csv,text/csv"
+              color="blue"
+              endpoint="/upload/pickup"
+              onResult={() => setRefreshTick((x) => x + 1)}
+            />
+            <UploadZone
+              title="Settlement Report"
+              description="Excel — reads only the Orders sheet. Multiple rows per Order Item ID are summed."
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              color="blue"
+              endpoint="/upload/settlement"
+              onResult={() => setRefreshTick((x) => x + 1)}
+            />
+            <UploadZone
+              title="Return on the way"
+              description="CSV / Excel — full Flipkart returns-in-transit file. Matched by Order Item ID."
+              accept="*"
+              color="orange"
+              endpoint="/upload/return-incoming"
+              onResult={() => setRefreshTick((x) => x + 1)}
+            />
+            <UploadZone
+              title="Return Received"
+              description="CSV / Excel — single column of Tracking IDs for parcels physically back with you."
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              color="yellow"
+              endpoint="/upload/returns"
+              onResult={() => setRefreshTick((x) => x + 1)}
+            />
+          </div>
+
+          <div className="card hint-card">
+            <strong>💡 Return file formats</strong>
+            <p>
+              <strong>Return on the way</strong> — Flipkart's returns-in-transit CSV with rich metadata.
+              Matched primarily by <code>Order Item ID</code>; falls back to <code>Tracking ID</code>.
+              Marks orders as <em>Return Incoming</em> but keeps profit untouched until the parcel is received.
+            </p>
+            <p>
+              <strong>Return Received</strong> — single column of Tracking IDs (header: <code>Tracking ID</code>,
+              <code>TrackingID</code>, <code>tracking_id</code>, or unnamed). Marks orders as fully returned.
+              Profit is recomputed from whatever settlement Flipkart actually paid (it may be negative if
+              they've charged reverse shipping).
+            </p>
+          </div>
+        </>
+      )}
 
       <div style={{ display: 'none' }}>{refreshTick}</div>
     </div>

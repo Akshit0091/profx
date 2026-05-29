@@ -16,6 +16,37 @@ export default function AdminPanel() {
   const [modalMonths, setModalMonths] = useState(1);
   const [modalBusy, setModalBusy] = useState(false);
 
+  // Plans modal: lets admin toggle which platforms a seller has access to
+  const [plansSeller, setPlansSeller] = useState(null);
+  const [plansSelected, setPlansSelected] = useState([]);
+  const [plansBusy, setPlansBusy] = useState(false);
+
+  const openPlans = (seller) => {
+    setPlansSeller(seller);
+    setPlansSelected(Array.isArray(seller.plans) ? [...seller.plans] : []);
+  };
+  const closePlans = () => {
+    setPlansSeller(null);
+    setPlansSelected([]);
+  };
+  const togglePlan = (p) => {
+    setPlansSelected((cur) => cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]);
+  };
+  const handleSavePlans = async () => {
+    if (!plansSeller) return;
+    setPlansBusy(true);
+    try {
+      await api.post(`/admin/sellers/${plansSeller.id}/plans`, { plans: plansSelected });
+      showToast(`Updated platforms for ${plansSeller.email}`);
+      closePlans();
+      loadSellers();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to update platforms', 'error');
+    } finally {
+      setPlansBusy(false);
+    }
+  };
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -249,6 +280,13 @@ export default function AdminPanel() {
                           <>
                             <button
                               className="btn btn-secondary btn-sm"
+                              onClick={() => openPlans(s)}
+                              title="Manage platform access"
+                            >
+                              Platforms
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
                               onClick={() => handleDeactivate(s)}
                             >
                               Deactivate
@@ -263,6 +301,13 @@ export default function AdminPanel() {
                           </>
                         ) : (
                           <>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => openPlans(s)}
+                              title="Manage platform access"
+                            >
+                              Platforms
+                            </button>
                             <button
                               className="btn btn-success btn-sm"
                               onClick={() => openActivate(s)}
@@ -359,6 +404,62 @@ export default function AdminPanel() {
                 </button>
                 <button className="btn btn-success" onClick={handleActivate} disabled={modalBusy}>
                   {modalBusy ? 'Activating...' : `Activate for ${modalMonths} month(s)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Platforms modal — toggle which marketplaces a seller can access */}
+        {plansSeller && (
+          <div className="modal-overlay" onClick={closePlans}>
+            <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Manage platforms</h2>
+                <button className="modal-close" onClick={closePlans}>×</button>
+              </div>
+              <div className="modal-body">
+                <p style={{ marginBottom: 6 }}>
+                  <strong>{plansSeller.email}</strong>
+                </p>
+                <p className="muted" style={{ marginBottom: 18 }}>
+                  Select which marketplaces this seller can access.
+                </p>
+                <div className="plans-grid">
+                  {[
+                    { key: 'flipkart', label: 'Flipkart', emoji: '🛒' },
+                    { key: 'meesho',   label: 'Meesho',   emoji: '🛍️' },
+                    { key: 'amazon',   label: 'Amazon',   emoji: '📦' },
+                  ].map((opt) => {
+                    const checked = plansSelected.includes(opt.key);
+                    return (
+                      <label
+                        key={opt.key}
+                        className={`plans-option ${checked ? 'is-checked' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => togglePlan(opt.key)}
+                        />
+                        <span className="plans-emoji">{opt.emoji}</span>
+                        <span className="plans-name">{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {plansSelected.length === 0 && (
+                  <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>
+                    ⚠ Saving with zero platforms will lock this seller out of all data.
+                  </p>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={closePlans} disabled={plansBusy}>
+                  Cancel
+                </button>
+                <button className="btn btn-success" onClick={handleSavePlans} disabled={plansBusy}>
+                  {plansBusy ? 'Saving...' : 'Save platforms'}
                 </button>
               </div>
             </div>

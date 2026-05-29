@@ -168,7 +168,14 @@ export default function Orders() {
   };
 
   const statusBadge = (o) => {
-    if (o.isReturned)      return <span className="badge badge-warning">↩ Returned</span>;
+    if (o.isReturned) {
+      // Meesho distinguishes RTO (never delivered) from Return (came back).
+      // Legacy Flipkart returns have no returnType → treat as a normal Return.
+      if (o.returnType === 'rto') {
+        return <span className="badge" style={{ background: '#f97316', color: '#fff' }}>🚚 RTO</span>;
+      }
+      return <span className="badge" style={{ background: '#eab308', color: '#fff' }}>↩ Returned</span>;
+    }
     if (o.returnIncoming)  return <span className="badge badge-orange">🚚 Return Incoming</span>;
     if (o.isMatched)       return <span className="badge badge-success">✓ Matched</span>;
     if (o.hasPickup && !o.hasSettlement) return <span className="badge badge-warning">No Settlement</span>;

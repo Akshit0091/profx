@@ -69,3 +69,110 @@
   font-size: 13px;
   text-decoration: underline;
 }
+
+/* ───── Phase 2: plan selection ───── */
+.payment-card-wide { max-width: 480px; }
+
+.plan-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.plan-toggle-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.plan-toggle-btn:hover { border-color: #cbd5e1; }
+.plan-toggle-btn.is-active {
+  border-color: #219BEF;
+  background: #f0f9ff;
+}
+.plan-toggle-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.plan-toggle-price {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  font-family: 'DM Mono', monospace;
+}
+.plan-toggle-price small {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+.plan-toggle-badge {
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  background: linear-gradient(135deg, #219BEF, #0B4B9E);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.plan-platform-picker { margin-bottom: 18px; }
+.picker-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+.picker-options {
+  display: flex;
+  gap: 8px;
+}
+.picker-option {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.picker-option:hover { border-color: #cbd5e1; }
+.picker-option.is-active { background: #f8fafc; }
+.picker-emoji { font-size: 22px; }
+.picker-name { font-size: 12.5px; font-weight: 600; color: #0f172a; }
+.picker-check {
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 13px; font-weight: 700;
+}
+
+.plan-all-summary {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #075985;
+  margin-bottom: 18px;
+}

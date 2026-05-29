@@ -181,3 +181,73 @@
   }
   .layout.mobile-open .sidebar { transform: translateX(0); }
 }
+
+/* ───── Platform switcher ───── */
+/* ───── Platform switcher ───── */
+.platform-switcher {
+  padding: 12px 14px 6px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  margin-bottom: 8px;
+}
+.platform-switcher.is-collapsed {
+  padding: 10px 8px 6px;
+}
+.platform-switcher-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted, #94a3b8);
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+.platform-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.platform-pill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1.5px solid var(--border, #e2e8f0);
+  background: #fff;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-soft, #475569);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  width: 100%;
+  text-align: left;
+}
+.platform-pill:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.platform-pill.is-active {
+  background: #fff;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.platform-switcher.is-collapsed .platform-pill {
+  justify-content: center;
+  padding: 9px 0;
+}
+.platform-pill-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+}
+.platform-pill-label {
+  white-space: nowrap;
+}
+.platform-switcher.is-collapsed .platform-pill-icon {
+  width: 20px;
+  height: 20px;
+}

@@ -437,3 +437,35 @@
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* ───── Phase 2: platforms modal ───── */
+.plans-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.plans-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.plans-option:hover { border-color: #cbd5e1; }
+.plans-option.is-checked {
+  border-color: #219BEF;
+  background: #f0f9ff;
+}
+.plans-option input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.plans-emoji { font-size: 24px; }
+.plans-name { font-size: 13px; font-weight: 600; color: #0f172a; }

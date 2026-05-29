@@ -9,11 +9,24 @@ const {
   sendPaymentFailedEmail,
   notifyAdminNewSeller,
 } = require('../utils/email');
+const { ALL_PLATFORMS, PRICE_SINGLE, PRICE_ALL, sanitizePlans } = require('../utils/platforms');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-const AMOUNT_PAISE = 59900; // ₹599
+// Resolve which plans + price a checkout request is for.
+// Body: { planType: 'single'|'all', platform?: 'flipkart'|'meesho'|'amazon' }
+// - single: requires `platform`, costs PRICE_SINGLE, grants [platform]
+// - all:    costs PRICE_ALL, grants all three platforms
+function resolvePlanSelection(body) {
+  const planType = (body && body.planType) === 'all' ? 'all' : 'single';
+  if (planType === 'all') {
+    return { planType: 'all', platforms: [...ALL_PLATFORMS], amount: PRICE_ALL };
+  }
+  const platform = String((body && body.platform) || 'flipkart').toLowerCase();
+  if (!ALL_PLATFORMS.includes(platform)) return null;
+  return { planType: 'single', platforms: [platform], amount: PRICE_SINGLE };
+}
 
 const getRazorpay = () => {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -31,11 +44,19 @@ router.post('/create-order', authMiddleware, async (req, res) => {
     const razorpay = getRazorpay();
     if (!razorpay) return res.status(500).json({ error: 'Razorpay is not configured' });
 
+    const selection = resolvePlanSelection(req.body);
+    if (!selection) return res.status(400).json({ error: 'Invalid plan selection' });
+
     const order = await razorpay.orders.create({
-      amount: AMOUNT_PAISE,
+      amount: selection.amount,
       currency: 'INR',
       receipt: `profx_${req.user.id.slice(0, 10)}_${Date.now()}`,
-      notes: { userId: req.user.id, email: req.user.email },
+      notes: {
+        userId: req.user.id,
+        email: req.user.email,
+        planType: selection.planType,
+        platforms: selection.platforms.join(','),
+      },
     });
 
     res.json({
@@ -43,6 +64,8 @@ router.post('/create-order', authMiddleware, async (req, res) => {
       amount: order.amount,
       currency: order.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
+      planType: selection.planType,
+      platforms: selection.platforms,
       user: {
         email: req.user.email,
         name: req.user.name || '',
@@ -72,6 +95,9 @@ router.post('/verify', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
+    const selection = resolvePlanSelection(req.body);
+    if (!selection) return res.status(400).json({ error: 'Invalid plan selection' });
+
     const now = new Date();
     const end = new Date(now);
     end.setMonth(end.getMonth() + 1);
@@ -80,7 +106,7 @@ router.post('/verify', authMiddleware, async (req, res) => {
     let sub = await prisma.subscription.findUnique({ where: { userId: req.user.id } });
     if (!sub) {
       sub = await prisma.subscription.create({
-        data: { userId: req.user.id, plan: 'starter', amount: AMOUNT_PAISE, status: 'pending' },
+        data: { userId: req.user.id, plan: selection.planType, amount: selection.amount, status: 'pending' },
       });
     }
 
@@ -89,28 +115,33 @@ router.post('/verify', authMiddleware, async (req, res) => {
       data: {
         razorpayPaymentId: razorpay_payment_id,
         razorpayCustomerId: razorpay_order_id, // store order ref here
+        plan: selection.planType,
         status: 'active',
-        amount: AMOUNT_PAISE,
+        amount: selection.amount,
         currentPeriodStart: now,
         currentPeriodEnd: end,
       },
     });
 
+    // Merge granted platforms with any the user already has (handles upgrades).
+    const existingPlans = Array.isArray(req.user.plans) ? req.user.plans : [];
+    const mergedPlans = sanitizePlans([...existingPlans, ...selection.platforms]);
+
     const updated = await prisma.user.update({
       where: { id: req.user.id },
-      data: { isActive: true },
+      data: { isActive: true, plans: mergedPlans },
     });
 
     // Fire-and-forget emails (don't block response)
     sendPaymentReceipt(updated, {
-      amount: AMOUNT_PAISE,
+      amount: selection.amount,
       paymentId: razorpay_payment_id,
       nextBilling: end,
     });
     sendWelcomeEmail(updated);
     notifyAdminNewSeller(updated);
 
-    res.json({ success: true, message: 'Payment verified, account activated' });
+    res.json({ success: true, message: 'Payment verified, account activated', plans: mergedPlans });
   } catch (err) {
     console.error('Verify error:', err);
     res.status(500).json({ error: 'Verification failed' });
