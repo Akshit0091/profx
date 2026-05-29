@@ -43,7 +43,10 @@ router.get('/dashboard', async (req, res) => {
       pendingSellers,
       expiredSellers,
       monthlyRevenue,
-      recentSignups: recentSignups.map((u) => ({
+      // Frontend's "Last 30 Days" card renders this as a number, so send the count.
+      recentSignups: recentSignups.length,
+      // Keep the actual recent-signup records under a separate key for future use.
+      recentSignupsList: recentSignups.map((u) => ({
         id: u.id,
         email: u.email,
         name: u.name,
@@ -100,7 +103,11 @@ router.get('/sellers', async (req, res) => {
         createdAt: s.createdAt,
         subscription: s.subscription,
         orderCount: s._count.orders,
+        // Frontend reads s._count?.orders, so include _count too.
+        _count: { orders: s._count.orders },
       })),
+      // Frontend reads r.data.totalPages directly; keep pagination for completeness.
+      totalPages: Math.ceil(total / take),
       pagination: { page: pageNum, limit: take, total, totalPages: Math.ceil(total / take) },
     });
   } catch (err) {
