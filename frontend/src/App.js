@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './utils/AuthContext';
 import Layout from './components/layout/Layout';
 import Landing from './pages/Landing';
@@ -8,6 +9,8 @@ import Contact from './pages/Contact';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Refund from './pages/Refund';
+import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Payment from './pages/Payment';
@@ -63,15 +66,18 @@ function PaymentRoute({ children }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+    <HelmetProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/"        element={<PublicRoute><Landing /></PublicRoute>} />
           <Route path="/product" element={<Product />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms"   element={<Terms />} />
           <Route path="/refund"  element={<Refund />} />
+          <Route path="/blog"        element={<Blog />} />
+          <Route path="/blog/:slug"  element={<BlogPost />} />
           <Route path="/login"   element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/signup"  element={<PublicRoute><Signup /></PublicRoute>} />
           <Route path="/payment" element={<PaymentRoute><Payment /></PaymentRoute>} />
@@ -84,8 +90,9 @@ export default function App() {
           <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </HelmetProvider>
   );
 }

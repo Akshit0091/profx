@@ -1,0 +1,30 @@
+# Decap CMS config — no-code blog publishing.
+# Commits Markdown into frontend/src/content/blog/ on your GitHub repo.
+# Posts go live after the next Vercel deploy (auto-triggered by the commit).
+
+backend:
+  name: github
+  repo: Akshit0091/profx          # your GitHub repo
+  branch: main                    # branch to commit posts to
+  # Requires a GitHub OAuth app — see PHASE5_DEPLOY.md for setup.
+
+media_folder: "frontend/public/blog"   # where uploaded images are stored
+public_folder: "/blog"                 # public URL prefix for those images
+
+collections:
+  - name: "blog"
+    label: "Blog Posts"
+    folder: "frontend/src/content/blog"
+    create: true
+    slug: "{{slug}}"
+    extension: "md"
+    format: "frontmatter"
+    fields:
+      - { label: "Title", name: "title", widget: "string" }
+      - { label: "Slug", name: "slug", widget: "string", hint: "URL part, e.g. flipkart-settlement-explained" }
+      - { label: "Date", name: "date", widget: "datetime", date_format: "YYYY-MM-DD", time_format: false }
+      - { label: "Excerpt", name: "excerpt", widget: "text" }
+      - { label: "Author", name: "author", widget: "string", default: "ProfX Team" }
+      - { label: "Tags", name: "tags", widget: "list", default: ["Seller Guide"] }
+      - { label: "Cover image", name: "cover", widget: "image", required: false }
+      - { label: "Body", name: "body", widget: "markdown" }

@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/sitemap.xml", "destination": "/sitemap.xml" },
+    { "source": "/robots.txt", "destination": "/robots.txt" },
+    { "source": "/blog-admin", "destination": "/blog-admin/index.html" },
+    { "source": "/blog-admin/(.*)", "destination": "/blog-admin/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

@@ -53,6 +53,7 @@ export default function MarketingLayout({ children }) {
                 document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' });
               }
             }}>FAQ</NavLink>
+            <NavLink to="/blog" className="mk-nav-link">Blog</NavLink>
             <NavLink to="/contact" className="mk-nav-link">Contact</NavLink>
           </nav>
 
@@ -98,6 +99,7 @@ export default function MarketingLayout({ children }) {
             </div>
             <div className="mk-footer-col">
               <h4>Company</h4>
+              <Link to="/blog">Blog</Link>
               <Link to="/contact">Contact</Link>
               <a href="mailto:support.profx@gmail.com">Email us</a>
               <Link to="/signup">Create account</Link>
@@ -114,7 +116,7 @@ export default function MarketingLayout({ children }) {
         <div className="mk-footer-bottom">
           <div className="mk-container mk-footer-bottom-inner">
             <span>© {new Date().getFullYear()} ProfX. Made in India.</span>
-            <span className="mk-footer-bottom-meta">Built for Flipkart sellers.</span>
+            <span className="mk-footer-bottom-meta">Built for Flipkart, Meesho & Amazon sellers.</span>
           </div>
         </div>
       </footer>
