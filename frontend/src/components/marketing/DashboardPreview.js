@@ -28,6 +28,11 @@ export default function DashboardPreview() {
               <small>Profit tracker</small>
             </div>
           </div>
+          <div className="dp-section-label">Marketplace</div>
+          <div className="dp-mkt-item is-active">🌐 All Platforms</div>
+          <div className="dp-mkt-item">🛒 Flipkart</div>
+          <div className="dp-mkt-item">🛍️ Meesho</div>
+          <div className="dp-mkt-item">📦 Amazon</div>
           <div className="dp-section-label">Workspace</div>
           <div className="dp-nav-item is-active">📊 Dashboard</div>
           <div className="dp-nav-item">📤 Upload Reports</div>
@@ -39,8 +44,8 @@ export default function DashboardPreview() {
         <div className="dp-main">
           <div className="dp-page-head">
             <div>
-              <h2>Dashboard</h2>
-              <p>By dispatch date — including returned orders.</p>
+              <h2>Combined Dashboard</h2>
+              <p>All platforms — Flipkart, Meesho &amp; Amazon, by dispatch date.</p>
             </div>
             <div className="dp-pills">
               <span className="dp-pill">Quick</span>

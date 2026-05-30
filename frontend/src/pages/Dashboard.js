@@ -3,6 +3,8 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
 import api from '../utils/api';
+import { useAuth } from '../utils/AuthContext';
+import { useActivePlatform, ALL_PLATFORM } from '../utils/platforms';
 import './Dashboard.css';
 
 const fmt = (n) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -39,6 +41,12 @@ function monthOptions() {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const { platform } = useActivePlatform(user);
+  const isCombined = platform === ALL_PLATFORM;
+  // Combined view hits a separate endpoint group that aggregates owned platforms.
+  const base = isCombined ? '/dashboard/combined' : '/dashboard';
+
   const [summary, setSummary] = useState(null);
   const [profitData, setProfitData] = useState([]);
   const [ordersData, setOrdersData] = useState([]);
@@ -64,9 +72,9 @@ export default function Dashboard() {
     let alive = true;
     setLoading(true);
     Promise.all([
-      api.get('/dashboard/summary',      { params }),
-      api.get('/dashboard/chart/profit', { params }),
-      api.get('/dashboard/chart/orders', { params }),
+      api.get(`${base}/summary`,      { params }),
+      api.get(`${base}/chart/profit`, { params }),
+      api.get(`${base}/chart/orders`, { params }),
     ])
       .then(([s, p, o]) => {
         if (!alive) return;
@@ -77,7 +85,7 @@ export default function Dashboard() {
       .catch(() => {})
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [params]);
+  }, [params, base]);
 
   const cards = summary ? [
     { color: '#2563eb', icon: '📦', label: 'Total Orders',     value: fmt(summary.totalOrders) },
@@ -94,8 +102,12 @@ export default function Dashboard() {
     <div className="dashboard">
       <div className="page-head">
         <div>
-          <h1>Dashboard</h1>
-          <p className="text-muted">By dispatch date — including returned orders (their loss counts too).</p>
+          <h1>{isCombined ? 'Combined Dashboard' : 'Dashboard'}</h1>
+          <p className="text-muted">
+            {isCombined
+              ? 'All platforms combined — totals summed across Flipkart, Meesho & Amazon by dispatch date.'
+              : 'By dispatch date — including returned orders (their loss counts too).'}
+          </p>
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../utils/AuthContext';
 import Logo from '../Logo';
-import { useActivePlatform, PLATFORM_META } from '../../utils/platforms';
+import { useActivePlatform, PLATFORM_META, ALL_PLATFORM, ALL_META } from '../../utils/platforms';
 import './Layout.css';
 
 export default function Layout({ children }) {
@@ -11,6 +11,7 @@ export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const { platform, switchPlatform, allowed } = useActivePlatform(user);
+  const isCombined = platform === ALL_PLATFORM;
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
@@ -20,12 +21,17 @@ export default function Layout({ children }) {
     return Math.ceil(ms / (1000 * 60 * 60 * 24));
   })();
 
-  const sellerNav = [
+  const sellerNavAll = [
     { to: '/app',         label: 'Dashboard',      icon: '📊', end: true },
     { to: '/app/upload',  label: 'Upload Reports', icon: '📤' },
     { to: '/app/orders',  label: 'Orders',         icon: '📋' },
     { to: '/app/sku',     label: 'SKU Pricing',    icon: '🏷️' },
   ];
+  // Combined view is dashboard-only — Upload / Orders / SKU are per-platform,
+  // so hide them when 'All Platforms' is active.
+  const sellerNav = isCombined
+    ? sellerNavAll.filter((i) => i.to === '/app')
+    : sellerNavAll;
   const adminNav = [
     { to: '/admin', label: 'Admin Panel', icon: '⚙️' },
     { to: '/app',   label: 'Seller View', icon: '👁️', end: true },
@@ -49,13 +55,14 @@ export default function Layout({ children }) {
           </button>
         </div>
 
-        {/* Platform switcher — only shown when the user owns more than one platform */}
+        {/* Platform switcher — shown when the user owns more than one platform,
+            or owns all three (so the 'All' option is available). */}
         {allowed.length > 1 && (
           <div className={`platform-switcher ${collapsed ? 'is-collapsed' : ''}`}>
             {!collapsed && <div className="platform-switcher-label">Marketplace</div>}
             <div className="platform-pills">
               {allowed.map((p) => {
-                const meta = PLATFORM_META[p];
+                const meta = p === ALL_PLATFORM ? ALL_META : PLATFORM_META[p];
                 const active = p === platform;
                 return (
                   <button
@@ -67,7 +74,11 @@ export default function Layout({ children }) {
                     title={meta.label}
                     aria-label={meta.label}
                   >
-                    <img className="platform-pill-icon" src={meta.logo} alt="" />
+                    {p === ALL_PLATFORM ? (
+                      <span className="platform-pill-emoji">{meta.emoji}</span>
+                    ) : (
+                      <img className="platform-pill-icon" src={meta.logo} alt="" />
+                    )}
                     {!collapsed && <span className="platform-pill-label">{meta.label}</span>}
                   </button>
                 );

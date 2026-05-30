@@ -33,12 +33,12 @@ const FEATURES = [
   {
     icon: '✏️',
     title: 'Manual overrides',
-    body: 'Edit any settlement, flag any order as returned. Your call beats the file when Flipkart gets weird.',
+    body: 'Edit any settlement, flag any order as returned. Your call beats the file when a marketplace gets weird.',
   },
 ];
 
 const HOW = [
-  { n: '01', t: 'Upload Pickup CSV',       d: 'Drop the Flipkart pickup export. Order Item IDs, SKUs, and tracking IDs ingested instantly.' },
+  { n: '01', t: 'Upload Pickup CSV',       d: 'Drop the Flipkart pickup or Meesho payment export. Order IDs, SKUs, and tracking ingested instantly.' },
   { n: '02', t: 'Upload Settlement Excel', d: 'Multi-file aware — every payout row across every settlement file is summed for each order.' },
   { n: '03', t: 'Set SKU purchase prices', d: 'Add a price once per SKU. We auto-detect missing ones and link them to every order.' },
   { n: '04', t: 'Upload Return reports',   d: 'Return on the way + Return received. Profit recalculates with reverse-shipping deducted.' },
@@ -46,19 +46,19 @@ const HOW = [
 
 const FAQ = [
   {
-    q: 'How is "real profit" different from what Flipkart shows me?',
-    a: 'Flipkart shows you payouts. ProfX shows you payouts minus your actual purchase cost minus reverse-shipping fees on returns. The number you walk away with — not the number that hits your bank account.',
+    q: 'How is "real profit" different from what the marketplace shows me?',
+    a: 'Marketplaces show you payouts. ProfX shows you payouts minus your actual purchase cost minus reverse-shipping fees on returns. The number you walk away with — not the number that hits your bank account.',
   },
   {
-    q: 'Which Flipkart reports do I need to upload?',
-    a: 'Three: the Pickup CSV (orders dispatched), the Settlement Excel (payouts), and the Return reports (in-transit + received). All from Flipkart Seller Hub. ProfX parses them as-is, no formatting required.',
+    q: 'Which reports do I need to upload?',
+    a: 'For Flipkart: the Pickup CSV, Settlement Excel, and Return reports from Seller Hub. For Meesho: a single Payment file from the Supplier Panel. ProfX parses them as-is, no formatting required.',
   },
   {
     q: 'What if the same order has multiple settlement entries across weeks?',
     a: 'They accumulate. We store every settlement line item, identify them by file hash, and sum across all uploads. Promotional reimbursements that hit weeks later are added to the order automatically.',
   },
   {
-    q: 'Can I correct an order if Flipkart\u2019s data is wrong?',
+    q: 'Can I correct an order if a marketplace\u2019s data is wrong?',
     a: 'Yes. Click any settlement cell to edit it inline, or mark/unmark any order as returned manually. Your overrides survive future uploads.',
   },
   {
@@ -100,20 +100,20 @@ export default function Landing() {
         <div className="mk-container hero-inner">
           <span className="hero-eyebrow">
             <span className="hero-eyebrow-dot" />
-            Built for Flipkart sellers
+            Built for Flipkart, Meesho & Amazon sellers
           </span>
           <h1 className="hero-title">
             Know your <span className="hero-grad">real profit</span>,<br />
-            on every Flipkart order.
+            on every marketplace order.
           </h1>
           <p className="hero-sub">
             Stop guessing what you actually made. ProfX matches your pickup, settlement, and return
-            reports automatically — and shows you the one number that matters: profit per order, after
-            every fee and return.
+            reports across Flipkart, Meesho, and Amazon — and shows you the one number that matters:
+            profit per order, after every fee and return.
           </p>
           <div className="hero-ctas">
             <Link to="/signup" className="mk-btn mk-btn-cta">
-              Get started — ₹599/month
+              Get started — from ₹599/month
             </Link>
             <a href="#how" className="mk-btn mk-btn-ghost mk-btn-lg" onClick={(e) => {
               e.preventDefault();
@@ -123,8 +123,8 @@ export default function Landing() {
             </a>
           </div>
           <div className="hero-trust">
+            <div><strong>3</strong> marketplaces supported</div>
             <div><strong>100%</strong> accurate matching</div>
-            <div><strong>3</strong> file types supported</div>
             <div><strong>0</strong> spreadsheets needed</div>
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function Landing() {
             <span className="section-eyebrow">Features</span>
             <h2 className="section-title">Everything you need.<br />Nothing you don't.</h2>
             <p className="section-sub">
-              ProfX is built around one job: telling you the truth about your Flipkart profit.
+              ProfX is built around one job: telling you the truth about your marketplace profit.
               No charts you'll never look at, no integrations you don't need.
             </p>
           </div>
@@ -193,7 +193,7 @@ export default function Landing() {
             <span className="section-eyebrow">How it works</span>
             <h2 className="section-title">From file to profit in four steps.</h2>
             <p className="section-sub">
-              Drop the same Flipkart reports you already download. ProfX handles the rest.
+              Drop the same reports you already download from each marketplace. ProfX handles the rest.
             </p>
           </div>
 
@@ -215,41 +215,68 @@ export default function Landing() {
         <div className="mk-container">
           <div className="section-head">
             <span className="section-eyebrow">Pricing</span>
-            <h2 className="section-title">One plan. Everything included.</h2>
-            <p className="section-sub">No tiers, no upsells, no per-order pricing.</p>
+            <h2 className="section-title">Pick your marketplaces.</h2>
+            <p className="section-sub">One platform, or all three with a combined dashboard. No per-order pricing.</p>
           </div>
 
-          <div className="price-card-wrap">
+          <div className="price-grid">
+            {/* Single platform */}
             <div className="price-card">
-              <div className="price-badge">Most popular</div>
-              <div className="price-name">ProfX Starter</div>
+              <div className="price-name">Single Platform</div>
               <div className="price-amount">
                 <span className="price-currency">₹</span>
                 <span className="price-number">599</span>
                 <span className="price-period">/month</span>
               </div>
-              <p className="price-tag">Everything you need to track real profit, forever.</p>
+              <p className="price-tag">Track one marketplace — Flipkart, Meesho, or Amazon.</p>
 
               <ul className="price-features">
+                <li>✓ One marketplace of your choice</li>
                 <li>✓ Unlimited orders, SKUs, and uploads</li>
                 <li>✓ Pickup, settlement, and return matching</li>
-                <li>✓ Multi-file accumulative settlements</li>
                 <li>✓ Real-time profit dashboard with custom date ranges</li>
                 <li>✓ Per-SKU profitability and bulk pricing</li>
-                <li>✓ Excel export of every order with full breakdown</li>
+                <li>✓ Excel export with full breakdown</li>
                 <li>✓ Manual settlement and return overrides</li>
                 <li>✓ Priority email support</li>
               </ul>
 
-              <Link to="/signup" className="mk-btn mk-btn-cta mk-btn-lg price-cta">
-                Get started — ₹599/month
+              <Link to="/signup" className="mk-btn mk-btn-ghost mk-btn-lg price-cta">
+                Start with one — ₹599/month
               </Link>
+            </div>
 
-              <p className="price-fine">
-                Cancel anytime. No setup fees. UPI &amp; cards accepted via Razorpay.
-              </p>
+            {/* All three */}
+            <div className="price-card">
+              <div className="price-badge">Best value</div>
+              <div className="price-name">All Three Platforms</div>
+              <div className="price-amount">
+                <span className="price-currency">₹</span>
+                <span className="price-number">999</span>
+                <span className="price-period">/month</span>
+              </div>
+              <p className="price-tag">Flipkart + Meesho + Amazon, plus a combined dashboard.</p>
+
+              <ul className="price-features">
+                <li>✓ <strong>All three marketplaces</strong></li>
+                <li>✓ <strong>Combined dashboard</strong> across every platform</li>
+                <li>✓ Unlimited orders, SKUs, and uploads</li>
+                <li>✓ Pickup, settlement, and return matching</li>
+                <li>✓ Real-time profit dashboard with custom date ranges</li>
+                <li>✓ Per-SKU profitability and bulk pricing</li>
+                <li>✓ Excel export with full breakdown</li>
+                <li>✓ Priority email support</li>
+              </ul>
+
+              <Link to="/signup" className="mk-btn mk-btn-cta mk-btn-lg price-cta">
+                Get all three — ₹999/month
+              </Link>
             </div>
           </div>
+
+          <p className="price-fine" style={{ textAlign: 'center', marginTop: 24 }}>
+            Cancel anytime. No setup fees. UPI &amp; cards accepted via Razorpay.
+          </p>
         </div>
       </section>
 
@@ -286,7 +313,7 @@ export default function Landing() {
         <div className="mk-container">
           <div className="final-cta">
             <h2>Ready to see what you actually earn?</h2>
-            <p>Three files, one screen, real profit. ₹599/month.</p>
+            <p>Flipkart, Meesho, Amazon — one screen, real profit. From ₹599/month.</p>
             <Link to="/signup" className="mk-btn mk-btn-cta mk-btn-lg">
               Get started now →
             </Link>

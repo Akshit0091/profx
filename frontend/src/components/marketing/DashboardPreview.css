@@ -252,6 +252,22 @@
   height: 160px;
   display: block;
 }
+.dp-mkt-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  margin-bottom: 3px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #475569;
+}
+.dp-mkt-item.is-active {
+  background: #eef2ff;
+  color: #4f46e5;
+  font-weight: 600;
+}
 
 @media (max-width: 760px) {
   .dp-body { grid-template-columns: 1fr; }

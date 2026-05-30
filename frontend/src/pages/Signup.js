@@ -43,23 +43,23 @@ export default function Signup() {
             <strong>Profx</strong>
           </Link>
           <h2>Track every rupee</h2>
-          <p className="auth-tag">Stop guessing your Flipkart profits.</p>
+          <p className="auth-tag">Stop guessing your marketplace profits.</p>
           <ul className="auth-features">
-            <li>✓ Auto pickup ↔ settlement matching</li>
+            <li>✓ Flipkart, Meesho & Amazon</li>
             <li>✓ Per-SKU profit, real-time</li>
             <li>✓ Returns auto-handled</li>
-            <li>✓ Bulk SKU pricing</li>
+            <li>✓ Combined dashboard (all-three plan)</li>
           </ul>
           <div className="auth-price-box">
-            <div>ProfX Starter</div>
-            <strong>₹599 / month</strong>
+            <div>ProfX</div>
+            <strong>From ₹599 / month</strong>
           </div>
         </div>
 
         <div className="auth-form-wrap">
           <form className="auth-form" onSubmit={submit}>
             <h1>Create your account</h1>
-            <p className="auth-form-sub">Takes 30 seconds — then pay ₹599 to activate.</p>
+            <p className="auth-form-sub">Takes 30 seconds — then choose your plan to activate.</p>
 
             <label>Full Name <span className="optional">(optional)</span></label>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Your name" />

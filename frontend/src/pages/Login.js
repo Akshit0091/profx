@@ -44,8 +44,8 @@ export default function Login() {
             <li>✓ Return-aware totals</li>
           </ul>
           <div className="auth-price-box">
-            <div>ProfX Starter</div>
-            <strong>₹599 / month</strong>
+            <div>ProfX</div>
+            <strong>From ₹599 / month</strong>
           </div>
         </div>
 

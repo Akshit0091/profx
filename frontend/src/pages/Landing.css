@@ -400,6 +400,28 @@
   margin: 16px 0 0;
 }
 
+.price-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  max-width: 880px;
+  margin: 0 auto;
+  align-items: stretch;
+}
+.price-grid .price-card {
+  display: flex;
+  flex-direction: column;
+}
+.price-grid .price-card .price-features {
+  flex: 1;
+}
+@media (max-width: 760px) {
+  .price-grid {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+  }
+}
+
 /* ───────── FAQ ───────── */
 .faq-list {
   max-width: 760px;

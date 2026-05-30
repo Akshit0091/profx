@@ -79,7 +79,7 @@ export default function Contact() {
               <div>
                 <h3>Based in</h3>
                 <span className="ct-info-value">India</span>
-                <p>Built by Indian sellers, for Indian sellers. We understand the Flipkart payout model
+                <p>Built by Indian sellers, for Indian sellers. We understand the Flipkart, Meesho & Amazon payout models
                 because we live it too.</p>
               </div>
             </div>

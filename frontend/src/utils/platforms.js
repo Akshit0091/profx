@@ -10,6 +10,10 @@ export const PLATFORM_META = {
 
 export const PLATFORM_ORDER = ['flipkart', 'meesho', 'amazon'];
 
+// Pseudo-platform: the combined "All platforms" view.
+export const ALL_PLATFORM = 'all';
+export const ALL_META = { label: 'All Platforms', short: 'ALL', color: '#6366f1', emoji: '🌐' };
+
 // Given a user's plans array, return the platform keys they can access, in order.
 export function platformsForUser(user) {
   if (!user) return [];
@@ -18,10 +22,23 @@ export function platformsForUser(user) {
   return PLATFORM_ORDER.filter((p) => plans.includes(p));
 }
 
+// True only when the user owns ALL three platforms (or is admin).
+// Gates the combined "All" view.
+export function ownsAllPlatforms(user) {
+  if (user && user.isAdmin) return true;
+  const owned = platformsForUser(user);
+  return PLATFORM_ORDER.every((p) => owned.includes(p));
+}
+
 // React hook for reading + switching the active platform.
 // Falls back to the first platform the user owns if the stored one isn't allowed.
+// When the user owns all three, 'all' is offered as a leading option.
 export function useActivePlatform(user) {
-  const allowed = platformsForUser(user);
+  const base = platformsForUser(user);
+  const canAll = ownsAllPlatforms(user);
+  // 'all' leads the list for all-three users.
+  const allowed = canAll ? [ALL_PLATFORM, ...base] : base;
+
   const [platform, setPlatformState] = useState(() => {
     const stored = getActivePlatform();
     if (allowed.length && !allowed.includes(stored)) return allowed[0];
@@ -46,5 +63,5 @@ export function useActivePlatform(user) {
     window.location.reload();
   }, [allowed]);
 
-  return { platform, switchPlatform, allowed };
+  return { platform, switchPlatform, allowed, canAll };
 }

@@ -216,10 +216,10 @@ export default function Product() {
       <section className="pr-hero">
         <div className="mk-container pr-hero-inner">
           <span className="section-eyebrow">The Product</span>
-          <h1>Built for one thing: <span className="hero-grad">real Flipkart profit.</span></h1>
+          <h1>Built for one thing: <span className="hero-grad">real marketplace profit.</span></h1>
           <p>
-            ProfX isn{'\u2019'}t a generic accounting tool with a Flipkart plugin. Every feature exists
-            because the Flipkart payout model demands it.
+            ProfX isn{'\u2019'}t a generic accounting tool with a marketplace plugin. Every feature exists
+            because the Flipkart, Meesho & Amazon payout models demand it.
           </p>
         </div>
       </section>
@@ -249,7 +249,7 @@ export default function Product() {
           <div className="final-cta">
             <h2>One number. Every day. Real profit.</h2>
             <p>Start your ProfX account in under a minute.</p>
-            <Link to="/signup" className="mk-btn mk-btn-cta mk-btn-lg">Get started — ₹599/month →</Link>
+            <Link to="/signup" className="mk-btn mk-btn-cta mk-btn-lg">Get started — from ₹599/month →</Link>
           </div>
         </div>
       </section>
