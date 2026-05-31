@@ -1,17 +1,12 @@
-# Decap CMS config — no-code blog publishing.
-# Commits Markdown into frontend/src/content/blog/ on your GitHub repo.
-# Posts go live after the next Vercel deploy (auto-triggered by the commit).
-
 backend:
   name: github
-  repo: Akshit0091/profx          # your GitHub repo
-  branch: main                    # branch to commit posts to
-  base_url: https://api.profx.website
+  repo: Akshit0091/profx
+  branch: main
+  base_url: https://profx-api.onrender.com
   auth_endpoint: oauth/auth
-  # Requires a GitHub OAuth app — see PHASE5_DEPLOY.md for setup.
 
-media_folder: "frontend/public/blog"   # where uploaded images are stored
-public_folder: "/blog"                 # public URL prefix for those images
+media_folder: "frontend/public/blog"
+public_folder: "/blog"
 
 collections:
   - name: "blog"
