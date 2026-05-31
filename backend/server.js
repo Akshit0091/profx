@@ -11,8 +11,7 @@ const ordersRoutes    = require('./routes/orders');
 const dashboardRoutes = require('./routes/dashboard');
 const resetRoutes     = require('./routes/reset');
 const contactRoutes   = require('./routes/contact');
-const oauthRoutes = require('./routes/oauth');
-app.use('/oauth', oauthRoutes);
+const oauthRoutes     = require('./routes/oauth');
 
 const app = express();
 
@@ -42,6 +41,7 @@ app.use('/api/orders',    ordersRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reset',     resetRoutes);
 app.use('/api/contact',   contactRoutes);
+app.use('/oauth',         oauthRoutes);
 
 // 404
 app.use((req, res) => {
