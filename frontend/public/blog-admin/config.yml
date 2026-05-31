@@ -7,6 +7,10 @@ backend:
 
 media_folder: "frontend/public/blog"
 public_folder: "/blog"
+media_folder: "frontend/public/blog"
+public_folder: "/blog"
+media_library:
+  max_file_size: 5120000
 
 collections:
   - name: "blog"
