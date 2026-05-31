@@ -11,7 +11,7 @@ router.get('/auth', (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
-    redirect_uri: `https://${req.get('host')}/oauth/callback`,
+    redirect_uri: 'https://profx-api.onrender.com/oauth/callback',
     scope: 'repo,user',
     state,
   });
