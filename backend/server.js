@@ -11,6 +11,8 @@ const ordersRoutes    = require('./routes/orders');
 const dashboardRoutes = require('./routes/dashboard');
 const resetRoutes     = require('./routes/reset');
 const contactRoutes   = require('./routes/contact');
+const oauthRoutes = require('./routes/oauth');
+app.use('/oauth', oauthRoutes);
 
 const app = express();
 

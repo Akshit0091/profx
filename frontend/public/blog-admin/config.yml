@@ -6,6 +6,8 @@ backend:
   name: github
   repo: Akshit0091/profx          # your GitHub repo
   branch: main                    # branch to commit posts to
+  base_url: https://api.profx.website
+  auth_endpoint: oauth/auth
   # Requires a GitHub OAuth app — see PHASE5_DEPLOY.md for setup.
 
 media_folder: "frontend/public/blog"   # where uploaded images are stored
