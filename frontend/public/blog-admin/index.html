@@ -5,8 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
     <title>ProfX Blog — Content Manager</title>
-  </head>
-  <body>
     <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
-  </body>
+    <script>
+      window.CMS.init({
+        config: {
+          backend: {
+            name: 'github',
+            repo: 'Akshit0091/profx',
+            branch: 'main',
+            base_url: 'https://profx-api.onrender.com',
+            auth_endpoint: 'oauth/auth'
+          },
+          media_folder: 'frontend/public/blog',
+          public_folder: '/blog',
+          collections: [{
+            name: 'blog',
+            label: 'Blog Posts',
+            folder: 'frontend/src/content/blog',
+            create: true,
+            slug: '{{slug}}',
+            extension: 'md',
+            format: 'frontmatter',
+            fields: [
+              { label: 'Title', name: 'title', widget: 'string' },
+              { label: 'Slug', name: 'slug', widget: 'string' },
+              { label: 'Date', name: 'date', widget: 'datetime', date_format: 'YYYY-MM-DD', time_format: false },
+              { label: 'Excerpt', name: 'excerpt', widget: 'text' },
+              { label: 'Author', name: 'author', widget: 'string', default: 'ProfX Team' },
+              { label: 'Tags', name: 'tags', widget: 'list', default: ['Seller Guide'] },
+              { label: 'Cover image', name: 'cover', widget: 'image', required: false },
+              { label: 'Body', name: 'body', widget: 'markdown' }
+            ]
+          }]
+        }
+      });
+    </script>
+  </head>
+  <body></body>
 </html>
