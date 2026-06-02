@@ -3,7 +3,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware, subscriptionMiddleware, platformMiddleware } = require('../middleware/auth');
-const { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, parseMeeshoPayment } = require('../utils/fileParser');
+const { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport } = require('../utils/fileParser');
 const { matchOrdersForUser } = require('../utils/matcher');
 
 const router = express.Router();
@@ -319,136 +319,158 @@ router.post('/undo-return', async (req, res) => {
   }
 });
 
-// ---------- MEESHO PAYMENT (single all-in-one file) ----------
-// Meesho gives ONE file per payout: pickup + settlement + returns together.
-// Unlike Flipkart's four separate files, this is a single upload zone.
-//  1. Parse "Order Payments" sheet
-//  2. Hash file bytes → fileHash (idempotent re-upload, mirrors /settlement)
-//  3. Delete prior SettlementEntry rows for this fileHash
-//  4. Upsert one Order per Sub Order No (platform="meesho"), carrying status/return flags
-//  5. Insert SettlementEntry rows; set Order.bankSettlement = SUM of all entries
-//  6. Re-match touched orders
-router.post('/meesho-payment', upload.single('file'), async (req, res) => {
+// ---------- UPLOAD HISTORY ----------
+// Returns all uploaded files (settlement + meesho) grouped by fileHash,
+// with metadata: fileName, upload date, entry count, unique orders, platform.
+// Derived purely from SettlementEntry — no new table needed.
+router.get('/history', async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const userId = req.user.id;
-    // This endpoint is Meesho-specific regardless of the active platform header.
-    const platform = 'meesho';
-    const rows = parseMeeshoPayment(req.file.buffer);
-    const fileHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
-    const fileName = req.file.originalname || null;
 
-    // Wipe prior contribution from this exact file (handles re-upload)
-    await prisma.settlementEntry.deleteMany({ where: { userId, platform, fileHash } });
-
-    let inserted = 0;
-    let updated = 0;
-    let returns = 0;
-    const touched = new Set();
-    const entries = [];
-
-    rows.forEach((row, idx) => {
-      if (!row.orderItemId) return;
-      if (row.bankSettlement === null || row.bankSettlement === undefined) return;
-      entries.push({
-        userId,
-        platform,
-        orderItemId: row.orderItemId,
-        orderId: null,
-        paymentDate: row.paymentDate || null,
-        bankSettlement: row.bankSettlement,
-        fileHash,
-        fileName,
-        rowIndex: idx,
-      });
+    // Group settlement entries by fileHash to reconstruct upload history
+    const entries = await prisma.settlementEntry.findMany({
+      where: { userId },
+      select: {
+        fileHash: true,
+        fileName: true,
+        platform: true,
+        orderItemId: true,
+        bankSettlement: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
     });
-    if (entries.length) {
-      await prisma.settlementEntry.createMany({ data: entries });
-    }
 
-    // Upsert the order rows themselves (pickup + settlement + return all in this file)
-    for (const row of rows) {
-      if (!row.orderItemId) continue;
-      touched.add(row.orderItemId);
-      if (row.isReturned) returns++;
-
-      const existing = await prisma.order.findUnique({
-        where: { orderItemId_userId_platform: { orderItemId: row.orderItemId, userId, platform } },
-      });
-
-      if (existing) {
-        await prisma.order.update({
-          where: { id: existing.id },
-          data: {
-            skuId: row.skuId || existing.skuId,
-            dispatchDate: row.dispatchDate || existing.dispatchDate,
-            paymentDate: row.paymentDate || existing.paymentDate,
-            hasPickup: true,
-            hasSettlement: true,
-            isReturned: row.isReturned,
-            returnType: row.returnType,
-            returnDate: row.isReturned ? (existing.returnDate || new Date()) : null,
-          },
+    // Group by fileHash
+    const map = new Map();
+    for (const e of entries) {
+      if (!e.fileHash) continue;
+      if (!map.has(e.fileHash)) {
+        map.set(e.fileHash, {
+          fileHash: e.fileHash,
+          fileName: e.fileName || 'Unknown file',
+          platform: e.platform,
+          type: e.platform === 'meesho' ? 'meesho-payment' : 'settlement',
+          uploadedAt: e.createdAt,
+          entryCount: 0,
+          orderIds: new Set(),
+          totalSettlement: 0,
         });
-        updated++;
-      } else {
-        await prisma.order.create({
-          data: {
-            orderItemId: row.orderItemId,
-            orderId: null,
-            skuId: row.skuId || null,
-            dispatchDate: row.dispatchDate || null,
-            paymentDate: row.paymentDate || null,
-            hasPickup: true,
-            hasSettlement: true,
-            isMatched: false,
-            isReturned: row.isReturned,
-            returnType: row.returnType,
-            returnDate: row.isReturned ? new Date() : null,
-            platform,
-            userId,
-          },
-        });
-        inserted++;
       }
+      const group = map.get(e.fileHash);
+      group.entryCount++;
+      group.orderIds.add(e.orderItemId);
+      group.totalSettlement += e.bankSettlement || 0;
+      // Keep the earliest createdAt as the upload date
+      if (e.createdAt < group.uploadedAt) group.uploadedAt = e.createdAt;
     }
 
-    // Recompute each touched order's settlement = SUM of all its entries
-    for (const orderItemId of touched) {
+    const history = Array.from(map.values())
+      .map((g) => ({
+        fileHash: g.fileHash,
+        fileHashShort: g.fileHash.slice(0, 12) + '…',
+        fileName: g.fileName,
+        platform: g.platform,
+        type: g.type,
+        uploadedAt: g.uploadedAt,
+        entryCount: g.entryCount,
+        uniqueOrders: g.orderIds.size,
+        totalSettlement: Math.round(g.totalSettlement * 100) / 100,
+      }))
+      .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+
+    res.json({ history });
+  } catch (err) {
+    console.error('Upload history error:', err);
+    res.status(500).json({ error: 'Failed to fetch upload history' });
+  }
+});
+
+// ---------- DELETE / ROLLBACK A FILE ----------
+// Removes all SettlementEntry rows for a given fileHash, then recomputes
+// bankSettlement for every affected order from remaining entries.
+// This cleanly undoes a file upload without touching other files' data.
+router.delete('/file/:fileHash', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { fileHash } = req.params;
+
+    if (!fileHash || fileHash.length < 10) {
+      return res.status(400).json({ error: 'Invalid file hash' });
+    }
+
+    // Find all entries for this file, to know which orders are affected
+    const entries = await prisma.settlementEntry.findMany({
+      where: { userId, fileHash },
+      select: { orderItemId: true, platform: true, fileName: true },
+    });
+
+    if (!entries.length) {
+      return res.status(404).json({ error: 'No upload found with this file hash' });
+    }
+
+    const platform = entries[0].platform;
+    const fileName = entries[0].fileName;
+    const affectedOrderIds = [...new Set(entries.map((e) => e.orderItemId))];
+
+    // Delete all entries from this file
+    const deleted = await prisma.settlementEntry.deleteMany({
+      where: { userId, fileHash },
+    });
+
+    // Recompute bankSettlement for each affected order from remaining entries
+    let recomputed = 0;
+    let zeroed = 0;
+    const touchedIds = [];
+
+    for (const orderItemId of affectedOrderIds) {
       const order = await prisma.order.findUnique({
         where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
       });
       if (!order) continue;
+
+      // Sum remaining entries (from other files)
       const agg = await prisma.settlementEntry.aggregate({
         where: { userId, platform, orderItemId },
         _sum: { bankSettlement: true },
         _max: { paymentDate: true },
+        _count: true,
       });
+
+      const remainingSum = agg._sum.bankSettlement || 0;
+      const hasRemaining = agg._count > 0;
+
       await prisma.order.update({
         where: { id: order.id },
         data: {
-          bankSettlement: agg._sum.bankSettlement,
-          paymentDate: agg._max.paymentDate || order.paymentDate,
+          bankSettlement: remainingSum,
+          hasSettlement: hasRemaining,
+          paymentDate: hasRemaining ? (agg._max.paymentDate || order.paymentDate) : order.paymentDate,
         },
       });
+
+      touchedIds.push(orderItemId);
+      if (hasRemaining) recomputed++;
+      else zeroed++;
     }
 
-    const matchResult = await matchOrdersForUser(userId, platform, Array.from(touched));
+    // Re-run matcher for all affected orders
+    if (touchedIds.length) {
+      await matchOrdersForUser(userId, platform, touchedIds);
+    }
+
     res.json({
       success: true,
-      type: 'meesho-payment',
-      processed: rows.length,
-      inserted,
-      updated,
-      returns,
-      uniqueOrders: touched.size,
-      entriesStored: entries.length,
-      matched: matchResult.updated,
+      fileName,
       fileHash: fileHash.slice(0, 12) + '…',
+      entriesDeleted: deleted.count,
+      ordersRecomputed: recomputed,
+      ordersZeroed: zeroed,
+      totalAffected: affectedOrderIds.length,
     });
   } catch (err) {
-    console.error('Meesho payment upload error:', err);
-    res.status(500).json({ error: 'Failed to parse Meesho payment file: ' + err.message });
+    console.error('File delete/rollback error:', err);
+    res.status(500).json({ error: 'Failed to delete file and rollback' });
   }
 });
 
