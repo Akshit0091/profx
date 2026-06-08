@@ -3,7 +3,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware, subscriptionMiddleware, platformMiddleware } = require('../middleware/auth');
-const { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport } = require('../utils/fileParser');
+const { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, parseMeeshoPayment } = require('../utils/fileParser');
 const { matchOrdersForUser } = require('../utils/matcher');
 
 const router = express.Router();
@@ -316,6 +316,110 @@ router.post('/undo-return', async (req, res) => {
   } catch (err) {
     console.error('Undo return error:', err);
     res.status(500).json({ error: 'Failed to undo return' });
+  }
+});
+
+// ---------- MEESHO PAYMENT (single all-in-one file) ----------
+router.post('/meesho-payment', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const userId = req.user.id;
+    const platform = 'meesho';
+    const rows = parseMeeshoPayment(req.file.buffer);
+    const fileHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
+    const fileName = req.file.originalname || null;
+
+    await prisma.settlementEntry.deleteMany({ where: { userId, platform, fileHash } });
+
+    let inserted = 0;
+    let updated = 0;
+    let returns = 0;
+    const touched = new Set();
+    const entries = [];
+
+    rows.forEach((row, idx) => {
+      if (!row.orderItemId) return;
+      if (row.bankSettlement === null || row.bankSettlement === undefined) return;
+      entries.push({
+        userId, platform, orderItemId: row.orderItemId, orderId: null,
+        paymentDate: row.paymentDate || null, bankSettlement: row.bankSettlement,
+        fileHash, fileName, rowIndex: idx,
+      });
+    });
+    if (entries.length) {
+      await prisma.settlementEntry.createMany({ data: entries });
+    }
+
+    for (const row of rows) {
+      if (!row.orderItemId) continue;
+      touched.add(row.orderItemId);
+      if (row.isReturned) returns++;
+
+      const existing = await prisma.order.findUnique({
+        where: { orderItemId_userId_platform: { orderItemId: row.orderItemId, userId, platform } },
+      });
+
+      if (existing) {
+        await prisma.order.update({
+          where: { id: existing.id },
+          data: {
+            skuId: row.skuId || existing.skuId,
+            dispatchDate: row.dispatchDate || existing.dispatchDate,
+            paymentDate: row.paymentDate || existing.paymentDate,
+            hasPickup: true, hasSettlement: true,
+            isReturned: row.isReturned,
+            returnType: row.returnType,
+            returnDate: row.isReturned ? (existing.returnDate || new Date()) : null,
+          },
+        });
+        updated++;
+      } else {
+        await prisma.order.create({
+          data: {
+            orderItemId: row.orderItemId, orderId: null,
+            skuId: row.skuId || null,
+            dispatchDate: row.dispatchDate || null,
+            paymentDate: row.paymentDate || null,
+            hasPickup: true, hasSettlement: true, isMatched: false,
+            isReturned: row.isReturned, returnType: row.returnType,
+            returnDate: row.isReturned ? new Date() : null,
+            platform, userId,
+          },
+        });
+        inserted++;
+      }
+    }
+
+    for (const orderItemId of touched) {
+      const order = await prisma.order.findUnique({
+        where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
+      });
+      if (!order) continue;
+      const agg = await prisma.settlementEntry.aggregate({
+        where: { userId, platform, orderItemId },
+        _sum: { bankSettlement: true },
+        _max: { paymentDate: true },
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          bankSettlement: agg._sum.bankSettlement,
+          paymentDate: agg._max.paymentDate || order.paymentDate,
+        },
+      });
+    }
+
+    const matchResult = await matchOrdersForUser(userId, platform, Array.from(touched));
+    res.json({
+      success: true, type: 'meesho-payment',
+      processed: rows.length, inserted, updated, returns,
+      uniqueOrders: touched.size, entriesStored: entries.length,
+      matched: matchResult.updated,
+      fileHash: fileHash.slice(0, 12) + '…',
+    });
+  } catch (err) {
+    console.error('Meesho payment upload error:', err);
+    res.status(500).json({ error: 'Failed to parse Meesho payment file: ' + err.message });
   }
 });
 
