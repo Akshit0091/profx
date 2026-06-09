@@ -121,6 +121,17 @@ export default function SKUPricing() {
     }
   };
 
+  const downloadSample = () => {
+    const csv = 'SKU_ID,Purchase_Price\nSAMPLE-SKU-001,250.00\nSAMPLE-SKU-002,150.50\nSAMPLE-SKU-003,499.00\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'profx-sku-sample.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleBulkUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -151,6 +162,13 @@ export default function SKUPricing() {
             <p>Set purchase prices to calculate accurate profit per order</p>
           </div>
           <div className="header-actions">
+            <button
+              className="btn btn-secondary"
+              onClick={downloadSample}
+              title="Download a sample CSV showing the correct format"
+            >
+              📄 Sample CSV
+            </button>
             <input
               ref={bulkInputRef}
               type="file"

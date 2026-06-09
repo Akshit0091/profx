@@ -133,8 +133,8 @@ router.post('/bulk', upload.single('file'), async (req, res) => {
 
     if (!rows.length) return res.json({ success: true, inserted: 0, updated: 0 });
 
-    const kSku   = findKey(rows[0], ['SKU_ID', 'SKU ID', 'sku_id', 'sku', 'SKU']);
-    const kPrice = findKey(rows[0], ['Purchase_Price', 'Purchase Price', 'price', 'purchase_price', 'PurchasePrice']);
+    const kSku   = findKey(rows[0], ['SKU_ID', 'SKU ID', 'sku_id', 'sku', 'SKU', 'Supplier SKU', 'supplier_sku', 'SKU Code', 'sku_code', 'Product SKU', 'product_sku', 'SKUID']);
+    const kPrice = findKey(rows[0], ['Purchase_Price', 'Purchase Price', 'price', 'purchase_price', 'PurchasePrice', 'Cost', 'cost', 'Cost Price', 'cost_price', 'Buy Price', 'buy_price', 'PP', 'MRP', 'mrp', 'Rate', 'rate']);
     if (!kSku || !kPrice) {
       return res.status(400).json({ error: 'CSV must contain SKU_ID and Purchase_Price columns' });
     }
