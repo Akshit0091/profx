@@ -26,6 +26,7 @@ model User {
   skus         SKU[]
   orders       Order[]
   settlementEntries SettlementEntry[]
+  uploadLogs        UploadLog[]
 }
 
 model Subscription {
@@ -144,5 +145,31 @@ model SettlementEntry {
   createdAt      DateTime  @default(now())
 
   @@index([userId, platform, orderItemId])
+  @@index([userId, fileHash])
+}
+
+// Tracks every file upload for history display and rollback.
+// Settlement/Meesho rollback uses SettlementEntry.fileHash.
+// Pickup/return rollback uses affectedIds to know which orders to undo.
+model UploadLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  platform    String
+  type        String   // 'pickup' | 'settlement' | 'returns' | 'return-incoming' | 'meesho-payment'
+  fileName    String?
+  fileHash    String?
+
+  rowCount    Int      @default(0)
+  inserted    Int      @default(0)
+  updated     Int      @default(0)
+
+  // orderItemIds or trackingIds affected, for rollback
+  affectedIds String[] @default([])
+
+  createdAt   DateTime @default(now())
+
+  @@index([userId, platform])
   @@index([userId, fileHash])
 }

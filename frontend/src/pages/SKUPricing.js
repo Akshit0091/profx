@@ -154,6 +154,20 @@ export default function SKUPricing() {
     }
   };
 
+  const exportMissing = async () => {
+    try {
+      const res = await api.get('/sku/missing/export', { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'profx-missing-skus.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast('Export failed', 'error');
+    }
+  };
+
   return (
     <div className="sku-page">
         <div className="sku-header">
@@ -193,6 +207,14 @@ export default function SKUPricing() {
               <h2>
                 {missing.length} SKU{missing.length > 1 ? 's' : ''} need purchase price
               </h2>
+              <button
+                className="btn btn-secondary btn-sm"
+                style={{ marginLeft: 'auto' }}
+                onClick={exportMissing}
+                title="Download an Excel file with all missing SKUs — fill in prices and re-upload via Bulk Upload"
+              >
+                📥 Export Missing SKUs
+              </button>
             </div>
             <p className="missing-sub">
               These SKUs appear in your orders but have no purchase price. Profit cannot be

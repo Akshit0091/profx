@@ -41,6 +41,16 @@ const posts = [
     ],
     "cover": "/blog/combined-cover.svg",
     "body": "Most growing sellers don't stay on one marketplace. You start on Flipkart, add Meesho for volume, list on Amazon for reach. But each platform pays you differently, reports differently, and hides margin in different places — so your real, blended profit becomes almost impossible to see.\n\n## Three platforms, three payout models\n\n- **Flipkart** settles across multiple files with commission, shipping, and collection fees, often spread over weeks.\n- **Meesho** bundles everything into one payment file per payout, with RTO and Return rows that settle at zero or negative.\n- **Amazon** has its own fee structure and settlement cadence again.\n\nReconciling three different formats by hand, in three spreadsheets, is how sellers end up flying blind on their actual bottom line.\n\n## Why a combined view matters\n\nPer-platform numbers answer \"how is Flipkart doing?\" But the question that actually runs your business is \"how am *I* doing?\" — across everything. A combined view tells you:\n\n- Total real profit this month, blended across every marketplace.\n- Whether a platform that looks busy is actually making money after fees and returns.\n- Where to put your inventory and attention next.\n\n## Keep the detail, add the overview\n\nThe goal isn't to lose per-platform detail — you still need to dig into Flipkart settlements or Meesho returns individually. The goal is to *add* a single combined dashboard on top, so you can zoom out to one honest number and zoom back in when something looks off.\n\nThat's exactly what ProfX's combined dashboard does: it sums real profit across Flipkart, Meesho and Amazon into one view, while keeping each platform's orders, SKUs and uploads separate underneath."
+  },
+  {
+    "slug": "why-most-ecommerce-sellers-think-theyre-profitable-but-arent",
+    "title": "Why Most Ecommerce Sellers Think They're Profitable (But Aren't)",
+    "date": "2026-05-31",
+    "excerpt": "Most sellers only look at sales and payouts. But real profit is much",
+    "author": "ProfX Team",
+    "tags": [],
+    "cover": "",
+    "body": "Why Most Ecommerce Sellers Think They're Profitable (But Aren't)\r\n\r\n\r\n\r\nIf you're selling on Flipkart, Amazon, Meesho, or any online marketplace, you've probably checked your sales dashboard and felt satisfied after seeing thousands of rupees in daily orders.\r\n\r\nThen settlement day arrives.\r\n\r\nThe payout looks much lower than expected.\r\n\r\nMost sellers assume this is normal. The reality is that many sellers don't actually know their real profit per order. They track sales, not profitability.\r\n\r\nAccording to ecommerce profit calculation guides, sellers often underestimate costs because marketplace commissions, shipping fees, taxes, returns, advertising expenses, and handling charges are spread across multiple reports rather than shown in one place."
   }
 ];
 export default posts;

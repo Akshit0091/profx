@@ -124,7 +124,7 @@ export default function Upload() {
   // Upload History state
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [deleting, setDeleting] = useState(null); // fileHash being deleted
+  const [deleting, setDeleting] = useState(null); // upload id being deleted
 
   const loadHistory = useCallback(async () => {
     try {
@@ -146,20 +146,15 @@ export default function Upload() {
     loadHistory();
   }, [loadHistory, refreshTick]);
 
-  const handleDeleteFile = async (fileHash, fileName) => {
+  const handleDeleteFile = async (uploadId, fileName) => {
     const confirmed = window.confirm(
-      `Delete "${fileName}"?\n\nThis will remove all settlement entries from this file and recompute affected orders. This cannot be undone.`
+      `Delete "${fileName}"?\n\nThis will rollback all changes made by this upload (entries removed, orders recomputed). This cannot be undone.`
     );
     if (!confirmed) return;
     try {
-      setDeleting(fileHash);
-      const res = await api.delete(`/upload/file/${fileHash}`);
-      alert(
-        `Rolled back "${res.data.fileName}":\n` +
-        `• ${res.data.entriesDeleted} entries removed\n` +
-        `• ${res.data.ordersRecomputed} orders recomputed\n` +
-        `• ${res.data.ordersZeroed} orders zeroed out`
-      );
+      setDeleting(uploadId);
+      const res = await api.delete(`/upload/file/${uploadId}`);
+      alert(`Rolled back "${res.data.fileName || fileName}":\n• ${res.data.rolled || 0} items rolled back`);
       setRefreshTick((x) => x + 1);
     } catch (err) {
       alert(err.response?.data?.error || 'Delete failed');
@@ -284,7 +279,7 @@ export default function Upload() {
         <div className="card" style={{ marginTop: 22, padding: '18px 22px' }}>
           <h3 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 700 }}>Upload History</h3>
           <p className="text-muted" style={{ margin: '0 0 14px', fontSize: 13 }}>
-            Settlement and payment files you've uploaded. Delete a file to remove its entries and recompute affected orders.
+            All uploaded files. Delete a file to rollback its changes and recompute affected orders.
           </p>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -293,48 +288,52 @@ export default function Upload() {
                   <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>File</th>
                   <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Type</th>
                   <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Uploaded</th>
-                  <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Entries</th>
-                  <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Orders</th>
-                  <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Total ₹</th>
+                  <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Rows</th>
+                  <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Affected</th>
                   <th style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {history.map((h) => (
-                  <tr key={h.fileHash} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.fileName}>
-                      {h.fileName}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{
-                        fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                        padding: '3px 8px', borderRadius: 5,
-                        background: h.type === 'meesho-payment' ? '#fdf2f8' : '#eff6ff',
-                        color: h.type === 'meesho-payment' ? '#be185d' : '#1d4ed8',
-                      }}>
-                        {h.type === 'meesho-payment' ? 'Meesho' : 'Settlement'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#64748b', fontSize: 12.5 }}>
-                      {new Date(h.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontFamily: "'DM Mono', monospace" }}>{h.entryCount}</td>
-                    <td style={{ padding: '10px 12px', fontFamily: "'DM Mono', monospace" }}>{h.uniqueOrders}</td>
-                    <td style={{ padding: '10px 12px', fontFamily: "'DM Mono', monospace" }}>
-                      ₹{h.totalSettlement.toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        style={{ fontSize: 12, padding: '5px 10px' }}
-                        onClick={() => handleDeleteFile(h.fileHash, h.fileName)}
-                        disabled={deleting === h.fileHash}
-                      >
-                        {deleting === h.fileHash ? '...' : '🗑 Delete'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {history.map((h) => {
+                  const typeLabels = {
+                    'pickup': { label: 'Pickup', bg: '#eff6ff', color: '#1d4ed8' },
+                    'settlement': { label: 'Settlement', bg: '#eff6ff', color: '#1d4ed8' },
+                    'returns': { label: 'Return Received', bg: '#fef9c3', color: '#854d0e' },
+                    'return-incoming': { label: 'Return Incoming', bg: '#fff7ed', color: '#c2410c' },
+                    'meesho-payment': { label: 'Meesho Payment', bg: '#fdf2f8', color: '#be185d' },
+                  };
+                  const t = typeLabels[h.type] || { label: h.type, bg: '#f1f5f9', color: '#475569' };
+                  return (
+                    <tr key={h.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '10px 12px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.fileName}>
+                        {h.fileName}
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                          padding: '3px 8px', borderRadius: 5, background: t.bg, color: t.color,
+                        }}>
+                          {t.label}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: '#64748b', fontSize: 12.5 }}>
+                        {new Date(h.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td style={{ padding: '10px 12px', fontFamily: "'DM Mono', monospace" }}>{h.rowCount || 0}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: "'DM Mono', monospace" }}>{h.affectedCount || 0}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          style={{ fontSize: 12, padding: '5px 10px' }}
+                          onClick={() => handleDeleteFile(h.id, h.fileName)}
+                          disabled={deleting === h.id}
+                        >
+                          {deleting === h.id ? '...' : '🗑 Delete'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

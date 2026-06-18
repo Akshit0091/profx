@@ -13,6 +13,18 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 router.use(authMiddleware, subscriptionMiddleware, platformMiddleware);
 
+// Helper: log every upload to UploadLog for history + rollback
+async function logUpload({ userId, platform, type, fileName, fileHash, rowCount, inserted, updated, affectedIds }) {
+  try {
+    await prisma.uploadLog.create({
+      data: { userId, platform, type, fileName: fileName || null, fileHash: fileHash || null, rowCount: rowCount || 0, inserted: inserted || 0, updated: updated || 0, affectedIds: affectedIds || [] },
+    });
+  } catch (err) {
+    console.error('Failed to log upload:', err);
+    // Non-fatal — don't break the upload response
+  }
+}
+
 // ---------- PICKUP ----------
 router.post('/pickup', upload.single('file'), async (req, res) => {
   try {
@@ -64,6 +76,7 @@ router.post('/pickup', upload.single('file'), async (req, res) => {
     }
 
     const matchResult = await matchOrdersForUser(userId, platform, touchedIds);
+    await logUpload({ userId, platform, type: 'pickup', fileName: req.file.originalname, rowCount: rows.length, inserted, updated, affectedIds: touchedIds });
     res.json({
       success: true,
       type: 'pickup',
@@ -161,6 +174,7 @@ router.post('/settlement', upload.single('file'), async (req, res) => {
     }
 
     const matchResult = await matchOrdersForUser(userId, platform, Array.from(touched));
+    await logUpload({ userId, platform, type: 'settlement', fileName: req.file.originalname, fileHash, rowCount: rows.length, inserted: entries.length, updated, affectedIds: Array.from(touched) });
     res.json({
       success: true,
       type: 'settlement',
@@ -215,6 +229,7 @@ router.post('/returns', upload.single('file'), async (req, res) => {
 
     // Recompute profit from current settlement values (no zero-out anymore)
     await matchOrdersForUser(userId, platform, touchedIds);
+    await logUpload({ userId, platform, type: 'returns', fileName: req.file.originalname, rowCount: trackingIds.length, inserted: marked, affectedIds: touchedIds });
 
     res.json({
       success: true,
@@ -241,6 +256,7 @@ router.post('/return-incoming', upload.single('file'), async (req, res) => {
     let marked = 0;
     let skipped = 0;
     const skippedSample = [];
+    const markedIds = [];
 
     for (const row of rows) {
       // Prefer match by orderItemId, fall back to trackingId
@@ -278,8 +294,10 @@ router.post('/return-incoming', upload.single('file'), async (req, res) => {
         },
       });
       marked++;
+      markedIds.push(order.orderItemId);
     }
 
+    await logUpload({ userId, platform, type: 'return-incoming', fileName: req.file.originalname, rowCount: rows.length, inserted: marked, affectedIds: markedIds });
     res.json({
       success: true,
       type: 'return-incoming',
@@ -410,6 +428,7 @@ router.post('/meesho-payment', upload.single('file'), async (req, res) => {
     }
 
     const matchResult = await matchOrdersForUser(userId, platform, Array.from(touched));
+    await logUpload({ userId, platform, type: 'meesho-payment', fileName: req.file.originalname, fileHash, rowCount: rows.length, inserted, updated, affectedIds: Array.from(touched) });
     res.json({
       success: true, type: 'meesho-payment',
       processed: rows.length, inserted, updated, returns,
@@ -424,64 +443,84 @@ router.post('/meesho-payment', upload.single('file'), async (req, res) => {
 });
 
 // ---------- UPLOAD HISTORY ----------
-// Returns all uploaded files (settlement + meesho) grouped by fileHash,
-// with metadata: fileName, upload date, entry count, unique orders, platform.
-// Derived purely from SettlementEntry — no new table needed.
+// Returns all uploads: from UploadLog (new) + legacy SettlementEntry groupings (old).
 router.get('/history', async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Group settlement entries by fileHash to reconstruct upload history
-    const entries = await prisma.settlementEntry.findMany({
+    // 1. UploadLog entries (new uploads going forward)
+    const logs = await prisma.uploadLog.findMany({
       where: { userId },
+      orderBy: { createdAt: 'desc' },
       select: {
-        fileHash: true,
-        fileName: true,
-        platform: true,
-        orderItemId: true,
-        bankSettlement: true,
-        createdAt: true,
+        id: true, platform: true, type: true, fileName: true, fileHash: true,
+        rowCount: true, inserted: true, updated: true, createdAt: true,
+        affectedIds: true,
       },
+    });
+
+    // 2. Legacy settlement entries (uploads before UploadLog existed) — group by fileHash
+    const logHashes = new Set(logs.filter((l) => l.fileHash).map((l) => l.fileHash));
+    const legacyEntries = await prisma.settlementEntry.findMany({
+      where: { userId },
+      select: { fileHash: true, fileName: true, platform: true, orderItemId: true, bankSettlement: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Group by fileHash
-    const map = new Map();
-    for (const e of entries) {
-      if (!e.fileHash) continue;
-      if (!map.has(e.fileHash)) {
-        map.set(e.fileHash, {
-          fileHash: e.fileHash,
-          fileName: e.fileName || 'Unknown file',
+    const legacyMap = new Map();
+    for (const e of legacyEntries) {
+      if (!e.fileHash || logHashes.has(e.fileHash)) continue; // skip if already in UploadLog
+      if (!legacyMap.has(e.fileHash)) {
+        legacyMap.set(e.fileHash, {
+          id: 'legacy_' + e.fileHash,
           platform: e.platform,
           type: e.platform === 'meesho' ? 'meesho-payment' : 'settlement',
-          uploadedAt: e.createdAt,
-          entryCount: 0,
-          orderIds: new Set(),
+          fileName: e.fileName || 'Unknown file',
+          fileHash: e.fileHash,
+          rowCount: 0, inserted: 0, updated: 0,
+          createdAt: e.createdAt,
+          affectedIds: new Set(),
           totalSettlement: 0,
+          isLegacy: true,
         });
       }
-      const group = map.get(e.fileHash);
-      group.entryCount++;
-      group.orderIds.add(e.orderItemId);
-      group.totalSettlement += e.bankSettlement || 0;
-      // Keep the earliest createdAt as the upload date
-      if (e.createdAt < group.uploadedAt) group.uploadedAt = e.createdAt;
+      const g = legacyMap.get(e.fileHash);
+      g.rowCount++;
+      g.affectedIds.add(e.orderItemId);
+      g.totalSettlement += e.bankSettlement || 0;
+      if (e.createdAt < g.createdAt) g.createdAt = e.createdAt;
     }
 
-    const history = Array.from(map.values())
-      .map((g) => ({
-        fileHash: g.fileHash,
-        fileHashShort: g.fileHash.slice(0, 12) + '…',
-        fileName: g.fileName,
+    // 3. Merge and format
+    const history = [
+      ...logs.map((l) => ({
+        id: l.id,
+        platform: l.platform,
+        type: l.type,
+        fileName: l.fileName || 'Unknown file',
+        fileHash: l.fileHash,
+        uploadedAt: l.createdAt,
+        rowCount: l.rowCount,
+        inserted: l.inserted,
+        updated: l.updated,
+        affectedCount: l.affectedIds?.length || 0,
+        isLegacy: false,
+      })),
+      ...Array.from(legacyMap.values()).map((g) => ({
+        id: g.id,
         platform: g.platform,
         type: g.type,
-        uploadedAt: g.uploadedAt,
-        entryCount: g.entryCount,
-        uniqueOrders: g.orderIds.size,
+        fileName: g.fileName,
+        fileHash: g.fileHash,
+        uploadedAt: g.createdAt,
+        rowCount: g.rowCount,
+        inserted: g.rowCount,
+        updated: 0,
+        affectedCount: g.affectedIds.size,
         totalSettlement: Math.round(g.totalSettlement * 100) / 100,
-      }))
-      .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+        isLegacy: true,
+      })),
+    ].sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
 
     res.json({ history });
   } catch (err) {
@@ -490,91 +529,154 @@ router.get('/history', async (req, res) => {
   }
 });
 
-// ---------- DELETE / ROLLBACK A FILE ----------
-// Removes all SettlementEntry rows for a given fileHash, then recomputes
-// bankSettlement for every affected order from remaining entries.
-// This cleanly undoes a file upload without touching other files' data.
-router.delete('/file/:fileHash', async (req, res) => {
+// ---------- DELETE / ROLLBACK AN UPLOAD ----------
+// Accepts either an UploadLog ID or a legacy fileHash (prefixed with 'legacy_').
+// Rolls back based on type:
+//   settlement/meesho: delete SettlementEntry by fileHash, recompute orders
+//   pickup: delete orders that have no settlement (safe), clear pickup on others
+//   returns: unmark orders as returned, recompute
+//   return-incoming: unmark orders as returnIncoming
+router.delete('/file/:id', async (req, res) => {
   try {
     const userId = req.user.id;
-    const { fileHash } = req.params;
+    const { id } = req.params;
 
-    if (!fileHash || fileHash.length < 10) {
-      return res.status(400).json({ error: 'Invalid file hash' });
+    let log = null;
+    let isLegacy = false;
+
+    if (id.startsWith('legacy_')) {
+      // Legacy settlement — no UploadLog entry, use fileHash directly
+      const fileHash = id.replace('legacy_', '');
+      const sample = await prisma.settlementEntry.findFirst({ where: { userId, fileHash } });
+      if (!sample) return res.status(404).json({ error: 'No upload found' });
+      log = {
+        type: sample.platform === 'meesho' ? 'meesho-payment' : 'settlement',
+        platform: sample.platform,
+        fileHash,
+        fileName: sample.fileName,
+        affectedIds: [],
+      };
+      isLegacy = true;
+    } else {
+      log = await prisma.uploadLog.findUnique({ where: { id } });
+      if (!log || log.userId !== userId) return res.status(404).json({ error: 'Upload not found' });
     }
 
-    // Find all entries for this file, to know which orders are affected
-    const entries = await prisma.settlementEntry.findMany({
-      where: { userId, fileHash },
-      select: { orderItemId: true, platform: true, fileName: true },
-    });
+    const { type, platform, fileHash, affectedIds } = log;
+    let result = { type, fileName: log.fileName, rolled: 0 };
 
-    if (!entries.length) {
-      return res.status(404).json({ error: 'No upload found with this file hash' });
-    }
+    // ── Settlement / Meesho: delete entries, recompute orders ──
+    if (type === 'settlement' || type === 'meesho-payment') {
+      if (!fileHash) return res.status(400).json({ error: 'No file hash — cannot rollback' });
 
-    const platform = entries[0].platform;
-    const fileName = entries[0].fileName;
-    const affectedOrderIds = [...new Set(entries.map((e) => e.orderItemId))];
-
-    // Delete all entries from this file
-    const deleted = await prisma.settlementEntry.deleteMany({
-      where: { userId, fileHash },
-    });
-
-    // Recompute bankSettlement for each affected order from remaining entries
-    let recomputed = 0;
-    let zeroed = 0;
-    const touchedIds = [];
-
-    for (const orderItemId of affectedOrderIds) {
-      const order = await prisma.order.findUnique({
-        where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
+      const entries = await prisma.settlementEntry.findMany({
+        where: { userId, fileHash },
+        select: { orderItemId: true },
       });
-      if (!order) continue;
+      const affectedOrderIds = [...new Set(entries.map((e) => e.orderItemId))];
 
-      // Sum remaining entries (from other files)
-      const agg = await prisma.settlementEntry.aggregate({
-        where: { userId, platform, orderItemId },
-        _sum: { bankSettlement: true },
-        _max: { paymentDate: true },
-        _count: true,
-      });
+      const deleted = await prisma.settlementEntry.deleteMany({ where: { userId, fileHash } });
 
-      const remainingSum = agg._sum.bankSettlement || 0;
-      const hasRemaining = agg._count > 0;
-
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          bankSettlement: remainingSum,
-          hasSettlement: hasRemaining,
-          paymentDate: hasRemaining ? (agg._max.paymentDate || order.paymentDate) : order.paymentDate,
-        },
-      });
-
-      touchedIds.push(orderItemId);
-      if (hasRemaining) recomputed++;
-      else zeroed++;
+      const touchedIds = [];
+      for (const orderItemId of affectedOrderIds) {
+        const order = await prisma.order.findUnique({
+          where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
+        });
+        if (!order) continue;
+        const agg = await prisma.settlementEntry.aggregate({
+          where: { userId, platform, orderItemId },
+          _sum: { bankSettlement: true },
+          _max: { paymentDate: true },
+          _count: true,
+        });
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            bankSettlement: agg._sum.bankSettlement || 0,
+            hasSettlement: agg._count > 0,
+            paymentDate: agg._count > 0 ? (agg._max.paymentDate || order.paymentDate) : order.paymentDate,
+          },
+        });
+        touchedIds.push(orderItemId);
+      }
+      if (touchedIds.length) await matchOrdersForUser(userId, platform, touchedIds);
+      result.rolled = deleted.count;
+      result.ordersRecomputed = touchedIds.length;
     }
 
-    // Re-run matcher for all affected orders
-    if (touchedIds.length) {
-      await matchOrdersForUser(userId, platform, touchedIds);
+    // ── Pickup: delete orders without settlement, clear pickup on others ──
+    else if (type === 'pickup') {
+      const ids = affectedIds || [];
+      let deleted = 0;
+      let cleared = 0;
+      for (const orderItemId of ids) {
+        const order = await prisma.order.findUnique({
+          where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
+        });
+        if (!order) continue;
+        if (!order.hasSettlement) {
+          // Safe to delete — no settlement data attached
+          await prisma.order.delete({ where: { id: order.id } });
+          deleted++;
+        } else {
+          // Has settlement — just clear pickup fields
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { hasPickup: false, trackingId: null },
+          });
+          cleared++;
+        }
+      }
+      result.rolled = deleted;
+      result.cleared = cleared;
     }
 
-    res.json({
-      success: true,
-      fileName,
-      fileHash: fileHash.slice(0, 12) + '…',
-      entriesDeleted: deleted.count,
-      ordersRecomputed: recomputed,
-      ordersZeroed: zeroed,
-      totalAffected: affectedOrderIds.length,
-    });
+    // ── Returns received: unmark as returned ──
+    else if (type === 'returns') {
+      const ids = affectedIds || [];
+      let unmarked = 0;
+      for (const orderItemId of ids) {
+        const order = await prisma.order.findUnique({
+          where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
+        });
+        if (!order || !order.isReturned) continue;
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { isReturned: false, returnDate: null },
+        });
+        unmarked++;
+      }
+      if (ids.length) await matchOrdersForUser(userId, platform, ids);
+      result.rolled = unmarked;
+    }
+
+    // ── Return incoming: unmark as incoming ──
+    else if (type === 'return-incoming') {
+      const ids = affectedIds || [];
+      let unmarked = 0;
+      for (const orderItemId of ids) {
+        const order = await prisma.order.findUnique({
+          where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
+        });
+        if (!order || !order.returnIncoming) continue;
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { returnIncoming: false },
+        });
+        unmarked++;
+      }
+      result.rolled = unmarked;
+    }
+
+    // Remove the UploadLog entry itself (if not legacy)
+    if (!isLegacy) {
+      await prisma.uploadLog.delete({ where: { id } }).catch(() => {});
+    }
+
+    res.json({ success: true, ...result });
   } catch (err) {
     console.error('File delete/rollback error:', err);
-    res.status(500).json({ error: 'Failed to delete file and rollback' });
+    res.status(500).json({ error: 'Failed to rollback upload: ' + err.message });
   }
 });
 

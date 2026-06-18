@@ -49,6 +49,39 @@ router.get('/missing', async (req, res) => {
   }
 });
 
+// Export missing SKUs as Excel — ready to fill in and re-upload via bulk
+router.get('/missing/export', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const platform = req.platform;
+    const orderSkus = await prisma.order.findMany({
+      where: { userId, platform, skuId: { not: null } },
+      select: { skuId: true },
+      distinct: ['skuId'],
+    });
+    const existing = await prisma.sKU.findMany({
+      where: { userId, platform },
+      select: { skuId: true },
+    });
+    const have = new Set(existing.map((s) => s.skuId));
+    const missing = orderSkus.map((o) => o.skuId).filter((sid) => sid && !have.has(sid));
+
+    // Build Excel with SKU_ID pre-filled and Purchase_Price empty
+    const data = missing.map((s) => ({ SKU_ID: s, Purchase_Price: '' }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Missing SKUs');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="profx-missing-skus-${platform}.xlsx"`);
+    res.send(buf);
+  } catch (err) {
+    console.error('Missing SKU export error:', err);
+    res.status(500).json({ error: 'Failed to export missing SKUs' });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const { skuId, purchasePrice } = req.body || {};
@@ -133,8 +166,8 @@ router.post('/bulk', upload.single('file'), async (req, res) => {
 
     if (!rows.length) return res.json({ success: true, inserted: 0, updated: 0 });
 
-    const kSku   = findKey(rows[0], ['SKU_ID', 'SKU ID', 'sku_id', 'sku', 'SKU', 'Supplier SKU', 'supplier_sku', 'SKU Code', 'sku_code', 'Product SKU', 'product_sku', 'SKUID']);
-    const kPrice = findKey(rows[0], ['Purchase_Price', 'Purchase Price', 'price', 'purchase_price', 'PurchasePrice', 'Cost', 'cost', 'Cost Price', 'cost_price', 'Buy Price', 'buy_price', 'PP', 'MRP', 'mrp', 'Rate', 'rate']);
+    const kSku   = findKey(rows[0], ['SKU_ID', 'SKU ID', 'sku_id', 'sku', 'SKU']);
+    const kPrice = findKey(rows[0], ['Purchase_Price', 'Purchase Price', 'price', 'purchase_price', 'PurchasePrice']);
     if (!kSku || !kPrice) {
       return res.status(400).json({ error: 'CSV must contain SKU_ID and Purchase_Price columns' });
     }
