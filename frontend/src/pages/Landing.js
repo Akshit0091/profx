@@ -279,7 +279,37 @@ export default function Landing() {
           </p>
         </div>
       </section>
+            {/* Trust & Security */}
+      <section className="section section-soft">
+        <div className="mk-container">
+          <div className="section-head">
+            <span className="section-eyebrow">Your data, your control</span>
+            <h2 className="section-title">We can't see your data.<br />And we never will.</h2>
+            <p className="section-sub">
+              Your orders, settlements, SKUs, and profits are yours alone.
+              ProfX is a tool, not a data company.
+            </p>
+          </div>
 
+          <div className="trust-grid">
+            <div className="trust-card">
+              <div className="trust-icon">🔒</div>
+              <h3>Fully isolated accounts</h3>
+              <p>Every seller's data is scoped to their account only. No seller can ever see another seller's orders, prices, or profits — not even us in normal operation.</p>
+            </div>
+            <div className="trust-card">
+              <div className="trust-icon">🚫</div>
+              <h3>We never sell your data</h3>
+              <p>No ads, no analytics on your business, no sharing with marketplaces or third parties. Your upload data is used for one thing: showing you your profit.</p>
+            </div>
+            <div className="trust-card">
+              <div className="trust-icon">🗑️</div>
+              <h3>Delete anytime</h3>
+              <p>Cancel your subscription and request deletion — we wipe your business data within 30 days. No lock-in, no hostage data, no "contact us to export."</p>
+            </div>
+          </div>
+        </div>
+      </section>
       {/* FAQ */}
       <section id="faq" className="section section-soft">
         <div className="mk-container">

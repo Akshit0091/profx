@@ -13,6 +13,8 @@ import Blog from './pages/Blog';
 import BlogPost from './pages/BlogPost';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Payment from './pages/Payment';
 import Dashboard from './pages/Dashboard';
 import Upload from './pages/Upload';
@@ -80,6 +82,8 @@ export default function App() {
           <Route path="/blog/:slug"  element={<BlogPost />} />
           <Route path="/login"   element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/signup"  element={<PublicRoute><Signup /></PublicRoute>} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password"  element={<ResetPassword />} />
           <Route path="/payment" element={<PaymentRoute><Payment /></PaymentRoute>} />
 
           <Route path="/app"           element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

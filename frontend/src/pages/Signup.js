@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../utils/AuthContext';
@@ -19,10 +19,7 @@ export default function Signup() {
     setLoading(true);
     try {
       const res = await api.post('/auth/signup', {
-        email: form.email,
-        password: form.password,
-        name: form.name,
-        phone: form.phone,
+        email: form.email, password: form.password, name: form.name, phone: form.phone,
       });
       login(res.data.token, res.data.user);
       if (res.data.user.isAdmin) navigate('/admin');
@@ -33,6 +30,36 @@ export default function Signup() {
       setLoading(false);
     }
   };
+
+  const handleGoogleResponse = async (response) => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/google', { credential: response.credential });
+      login(res.data.token, res.data.user);
+      if (res.data.user.isAdmin) navigate('/admin');
+      else if (!res.data.user.isActive) navigate('/payment');
+      else navigate('/app');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Google signup failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId || !window.google?.accounts?.id) return;
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleGoogleResponse,
+    });
+    window.google.accounts.id.renderButton(
+      document.getElementById('google-signup-btn'),
+      { theme: 'outline', size: 'large', width: '100%', text: 'signup_with', shape: 'rectangular' }
+    );
+    // eslint-disable-next-line
+  }, []);
 
   return (
     <div className="auth-page">
@@ -50,6 +77,11 @@ export default function Signup() {
             <li>✓ Returns auto-handled</li>
             <li>✓ Combined dashboard (all-three plan)</li>
           </ul>
+          <div className="auth-platforms">
+            <img src="/flipkart.jpg" alt="Flipkart" className="auth-platform-logo" />
+            <img src="/Meesho_logo.png" alt="Meesho" className="auth-platform-logo" />
+            <img src="/Amazon_icon.svg" alt="Amazon" className="auth-platform-logo" />
+          </div>
           <div className="auth-price-box">
             <div>ProfX</div>
             <strong>From ₹599 / month</strong>
@@ -60,6 +92,12 @@ export default function Signup() {
           <form className="auth-form" onSubmit={submit}>
             <h1>Create your account</h1>
             <p className="auth-form-sub">Takes 30 seconds — then choose your plan to activate.</p>
+
+            <div id="google-signup-btn" className="google-btn-wrap"></div>
+
+            <div className="auth-divider">
+              <span>or sign up with email</span>
+            </div>
 
             <label>Full Name <span className="optional">(optional)</span></label>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Your name" />

@@ -479,7 +479,38 @@
   line-height: 1.6;
   color: var(--mk-ink-soft);
 }
-
+/* ───── Trust & Security section ───── */
+.trust-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.trust-card {
+  background: #fff;
+  border: 1px solid var(--mk-border);
+  border-radius: var(--mk-radius-lg);
+  padding: 28px;
+  text-align: center;
+}
+.trust-icon {
+  font-size: 32px;
+  margin-bottom: 14px;
+}
+.trust-card h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--mk-ink);
+  margin: 0 0 10px;
+}
+.trust-card p {
+  font-size: 14.5px;
+  color: var(--mk-ink-soft);
+  line-height: 1.55;
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .trust-grid { grid-template-columns: 1fr; }
+}
 /* ───────── Final CTA ───────── */
 .section-final-cta {
   padding: 64px 0 100px;
