@@ -49,39 +49,6 @@ router.get('/missing', async (req, res) => {
   }
 });
 
-// Export missing SKUs as Excel — ready to fill in and re-upload via bulk
-router.get('/missing/export', async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const platform = req.platform;
-    const orderSkus = await prisma.order.findMany({
-      where: { userId, platform, skuId: { not: null } },
-      select: { skuId: true },
-      distinct: ['skuId'],
-    });
-    const existing = await prisma.sKU.findMany({
-      where: { userId, platform },
-      select: { skuId: true },
-    });
-    const have = new Set(existing.map((s) => s.skuId));
-    const missing = orderSkus.map((o) => o.skuId).filter((sid) => sid && !have.has(sid));
-
-    // Build Excel with SKU_ID pre-filled and Purchase_Price empty
-    const data = missing.map((s) => ({ SKU_ID: s, Purchase_Price: '' }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Missing SKUs');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="profx-missing-skus-${platform}.xlsx"`);
-    res.send(buf);
-  } catch (err) {
-    console.error('Missing SKU export error:', err);
-    res.status(500).json({ error: 'Failed to export missing SKUs' });
-  }
-});
-
 router.post('/', async (req, res) => {
   try {
     const { skuId, purchasePrice } = req.body || {};
@@ -147,13 +114,47 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Bulk CSV: columns SKU_ID, Purchase_Price
+// Bulk CSV/XLSX: columns SKU_ID, Purchase_Price
 router.post('/bulk', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer', raw: false });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+
+    let rows;
+    const isCSV = (req.file.originalname || '').toLowerCase().endsWith('.csv');
+
+    if (isCSV) {
+      // Custom CSV parser — handles quoted fields with commas (xlsx can't)
+      const str = req.file.buffer.toString('utf8');
+      const lines = str.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+      if (!lines.length) return res.json({ success: true, inserted: 0, updated: 0 });
+
+      function splitRow(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') { inQuotes = !inQuotes; continue; }
+          if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; continue; }
+          current += ch;
+        }
+        result.push(current.trim());
+        return result;
+      }
+
+      const headers = splitRow(lines[0]);
+      rows = lines.slice(1).map(line => {
+        const vals = splitRow(line);
+        const obj = {};
+        headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
+        return obj;
+      });
+    } else {
+      // Excel files — use xlsx
+      const wb = XLSX.read(req.file.buffer, { type: 'buffer', raw: false });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+    }
 
     const findKey = (obj, candidates) => {
       const keys = Object.keys(obj);
