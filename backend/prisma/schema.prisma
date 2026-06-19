@@ -22,11 +22,15 @@ model User {
   // Values: "flipkart", "meesho", "amazon". Existing users backfill to ["flipkart"].
   plans        String[]      @default([])
 
+  // Amazon seller type: "easyship", "selfship", or "both". Null = not set yet.
+  amazonSellerType String?
+
   subscription Subscription?
   skus         SKU[]
   orders       Order[]
   settlementEntries SettlementEntry[]
-  uploadLogs        UploadLog[]
+  uploadLogs   UploadLog[]
+  shippingRates ShippingRate[]
 }
 
 model Subscription {
@@ -53,6 +57,7 @@ model SKU {
   id            String   @id @default(cuid())
   skuId         String
   purchasePrice Float
+  weight        Int?          // Weight in grams. Needed for Self Ship Amazon shipping cost calculation.
 
   // Which marketplace this SKU price belongs to. Same physical product may be
   // listed at different prices per platform, so price is scoped per platform.
@@ -96,6 +101,11 @@ model Order {
   // Distinguishes return sub-types. For Flipkart: null or "returned".
   // For Meesho: "rto" (never delivered, settlement 0) vs "return" (came back, reverse fee).
   returnType            String?
+
+  // Amazon fulfillment: "merchant" (Self Ship) or "amazon" (Easy Ship/FBA). Null for Flipkart/Meesho.
+  fulfillmentType       String?
+  // Shipping cost for Self Ship orders (calculated from SKU weight + seller's rate card).
+  shippingCost          Float?
 
   returnIncoming        Boolean   @default(false)
   returnRequestedDate   DateTime?
@@ -148,28 +158,32 @@ model SettlementEntry {
   @@index([userId, fileHash])
 }
 
-// Tracks every file upload for history display and rollback.
-// Settlement/Meesho rollback uses SettlementEntry.fileHash.
-// Pickup/return rollback uses affectedIds to know which orders to undo.
 model UploadLog {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   platform    String
-  type        String   // 'pickup' | 'settlement' | 'returns' | 'return-incoming' | 'meesho-payment'
+  type        String
   fileName    String?
   fileHash    String?
-
   rowCount    Int      @default(0)
   inserted    Int      @default(0)
   updated     Int      @default(0)
-
-  // orderItemIds or trackingIds affected, for rollback
   affectedIds String[] @default([])
-
   createdAt   DateTime @default(now())
 
   @@index([userId, platform])
   @@index([userId, fileHash])
+}
+
+model ShippingRate {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  minWeight Int      // grams
+  maxWeight Int      // grams
+  cost      Float    // ₹ per shipment
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

@@ -288,4 +288,100 @@ function parseMeeshoPayment(buffer) {
   return result;
 }
 
-module.exports = { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, parseMeeshoPayment, stripApostrophe };
+// ---------- AMAZON MONTHLY UNIFIED TRANSACTION (CSV) ----------
+// File has ~13 metadata lines at top, then a header row starting with "date/time".
+// Types we process: Order, Refund, SAFE-T Reimbursement, Reimbursements.
+// Skips: Transfer, Service Fee (not order-related).
+// The `fulfillment` column tells us Easy Ship ("Amazon") vs Self Ship ("Merchant").
+// The `total` column is the net amount Amazon pays the seller per transaction.
+function parseAmazonTransaction(buffer) {
+  const str = buffer.toString('utf8').replace(/^\uFEFF/, '');
+  const lines = str.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+  // Find header row
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(lines.length, 25); i++) {
+    if (lines[i].trim().replace(/^"/, '').startsWith('date/time')) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) throw new Error('Could not find Amazon header row (expected "date/time" column)');
+
+  // CSV parser handling quoted fields with commas
+  function splitCSV(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQuotes = !inQuotes; continue; }
+      if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; continue; }
+      current += ch;
+    }
+    result.push(current.trim());
+    return result;
+  }
+
+  const headers = splitCSV(lines[headerIdx]).map(h => h.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim());
+  const dataLines = lines.slice(headerIdx + 1).filter(l => l.trim());
+
+  function col(name) {
+    const clean = name.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+    return headers.findIndex(h => h === clean);
+  }
+
+  const iDateTime     = col('datetime');
+  const iType         = col('type');
+  const iOrderId      = col('order id');
+  const iSku          = col('sku');
+  const iDescription  = col('description');
+  const iQuantity     = col('quantity');
+  const iFulfillment  = col('fulfillment');
+  const iProductSales = col('product sales');
+  const iSellingFees  = col('selling fees');
+  const iFbaFees      = col('fba fees');
+  const iOtherFees    = col('other transaction fees');
+  const iOther        = col('other');
+  const iTotal        = col('total');
+  const iReleaseDate  = col('transaction release date');
+  const iCity         = col('order city');
+  const iState        = col('order state');
+
+  const processTypes = new Set(['Order', 'Refund', 'SAFE-T Reimbursement', 'Reimbursements']);
+  const rows = [];
+
+  for (const line of dataLines) {
+    const c = splitCSV(line);
+    const type = c[iType] || '';
+    if (!processTypes.has(type)) continue;
+    const orderId = c[iOrderId] || '';
+    if (!orderId) continue;
+
+    const isRefund = type === 'Refund';
+    const fulfillment = (c[iFulfillment] || '').trim().toLowerCase();
+
+    rows.push({
+      orderItemId: orderId,
+      skuId: c[iSku] || null,
+      dispatchDate: parseDate(c[iDateTime]),
+      paymentDate: parseDate(c[iReleaseDate] || c[iDateTime]),
+      bankSettlement: parseNumber(c[iTotal]),
+      productSales: parseNumber(c[iProductSales]),
+      sellingFees: parseNumber(c[iSellingFees]),
+      fbaFees: parseNumber(c[iFbaFees]),
+      otherFees: parseNumber(c[iOtherFees]),
+      quantity: parseInt(c[iQuantity]) || 1,
+      fulfillmentType: fulfillment === 'amazon' ? 'amazon' : 'merchant',
+      isReturned: isRefund,
+      returnType: isRefund ? 'return' : null,
+      type,
+      description: (c[iDescription] || '').slice(0, 200),
+      city: c[iCity] || null,
+      state: c[iState] || null,
+    });
+  }
+  return rows;
+}
+
+module.exports = { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, parseMeeshoPayment, parseAmazonTransaction, stripApostrophe };

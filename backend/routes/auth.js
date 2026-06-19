@@ -131,24 +131,55 @@ router.get('/me', authMiddleware, async (req, res) => {
   const u = req.user;
   res.json({
     user: {
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      phone: u.phone,
-      isAdmin: u.isAdmin,
-      isActive: u.isActive,
-      plans: u.plans || [],
-      subscription: u.subscription
-        ? {
-            status: u.subscription.status,
-            currentPeriodEnd: u.subscription.currentPeriodEnd,
-            currentPeriodStart: u.subscription.currentPeriodStart,
-            plan: u.subscription.plan,
-            amount: u.subscription.amount,
-          }
-        : null,
+      id: u.id, email: u.email, name: u.name, phone: u.phone,
+      isAdmin: u.isAdmin, isActive: u.isActive, plans: u.plans || [],
+      amazonSellerType: u.amazonSellerType || null,
+      subscription: u.subscription ? {
+        status: u.subscription.status, currentPeriodEnd: u.subscription.currentPeriodEnd,
+        currentPeriodStart: u.subscription.currentPeriodStart, plan: u.subscription.plan, amount: u.subscription.amount,
+      } : null,
     },
   });
+});
+
+// ---------- PROFILE UPDATE ----------
+router.put('/profile', authMiddleware, async (req, res) => {
+  try {
+    const { name, phone, amazonSellerType } = req.body || {};
+    const data = {};
+    if (name !== undefined) data.name = name || null;
+    if (phone !== undefined) data.phone = phone || null;
+    if (amazonSellerType !== undefined) {
+      const valid = ['easyship', 'selfship', 'both', null];
+      if (!valid.includes(amazonSellerType)) return res.status(400).json({ error: 'Invalid Amazon seller type' });
+      data.amazonSellerType = amazonSellerType;
+    }
+    const user = await prisma.user.update({ where: { id: req.user.id }, data });
+    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, amazonSellerType: user.amazonSellerType } });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// ---------- CHANGE PASSWORD ----------
+router.post('/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both current and new password are required' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const valid = await bcrypt.compare(currentPassword, user.password);
+    if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({ where: { id: req.user.id }, data: { password: hashed } });
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
 });
 
 // ---------- GOOGLE LOGIN ----------

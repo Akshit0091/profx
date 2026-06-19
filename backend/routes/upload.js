@@ -3,7 +3,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware, subscriptionMiddleware, platformMiddleware } = require('../middleware/auth');
-const { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, parseMeeshoPayment } = require('../utils/fileParser');
+const { parsePickupReport, parseSettlementReport, parseReturnReport, parseReturnIncomingReport, parseMeeshoPayment, parseAmazonTransaction } = require('../utils/fileParser');
 const { matchOrdersForUser } = require('../utils/matcher');
 
 const router = express.Router();
@@ -439,6 +439,119 @@ router.post('/meesho-payment', upload.single('file'), async (req, res) => {
   } catch (err) {
     console.error('Meesho payment upload error:', err);
     res.status(500).json({ error: 'Failed to parse Meesho payment file: ' + err.message });
+  }
+});
+
+// ---------- AMAZON TRANSACTION (single unified CSV) ----------
+router.post('/amazon-transaction', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const userId = req.user.id;
+    const platform = 'amazon';
+    const rows = parseAmazonTransaction(req.file.buffer);
+    const fileHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
+    const fileName = req.file.originalname || null;
+
+    // Delete prior entries for this file (idempotent re-upload)
+    await prisma.settlementEntry.deleteMany({ where: { userId, platform, fileHash } });
+
+    let inserted = 0;
+    let updated = 0;
+    let returns = 0;
+    const touched = new Set();
+    const entries = [];
+
+    // Create settlement entries
+    rows.forEach((row, idx) => {
+      if (!row.orderItemId) return;
+      if (row.bankSettlement === null || row.bankSettlement === undefined) return;
+      entries.push({
+        userId, platform, orderItemId: row.orderItemId, orderId: null,
+        paymentDate: row.paymentDate || null, bankSettlement: row.bankSettlement,
+        fileHash, fileName, rowIndex: idx,
+      });
+    });
+    if (entries.length) {
+      await prisma.settlementEntry.createMany({ data: entries });
+    }
+
+    // Create/update Order rows
+    for (const row of rows) {
+      if (!row.orderItemId) continue;
+      touched.add(row.orderItemId);
+      if (row.isReturned) returns++;
+
+      const existing = await prisma.order.findUnique({
+        where: { orderItemId_userId_platform: { orderItemId: row.orderItemId, userId, platform } },
+      });
+
+      if (existing) {
+        await prisma.order.update({
+          where: { id: existing.id },
+          data: {
+            skuId: row.skuId || existing.skuId,
+            dispatchDate: row.dispatchDate || existing.dispatchDate,
+            paymentDate: row.paymentDate || existing.paymentDate,
+            hasPickup: true, hasSettlement: true,
+            isReturned: row.isReturned || existing.isReturned,
+            returnType: row.returnType || existing.returnType,
+            returnDate: row.isReturned ? (existing.returnDate || new Date()) : existing.returnDate,
+            fulfillmentType: row.fulfillmentType || existing.fulfillmentType,
+          },
+        });
+        updated++;
+      } else {
+        await prisma.order.create({
+          data: {
+            orderItemId: row.orderItemId, orderId: null,
+            skuId: row.skuId || null,
+            dispatchDate: row.dispatchDate || null,
+            paymentDate: row.paymentDate || null,
+            hasPickup: true, hasSettlement: true, isMatched: false,
+            isReturned: row.isReturned, returnType: row.returnType,
+            returnDate: row.isReturned ? new Date() : null,
+            fulfillmentType: row.fulfillmentType,
+            platform, userId,
+          },
+        });
+        inserted++;
+      }
+    }
+
+    // Recompute bankSettlement per order from all settlement entries
+    for (const orderItemId of touched) {
+      const order = await prisma.order.findUnique({
+        where: { orderItemId_userId_platform: { orderItemId, userId, platform } },
+      });
+      if (!order) continue;
+      const agg = await prisma.settlementEntry.aggregate({
+        where: { userId, platform, orderItemId },
+        _sum: { bankSettlement: true },
+        _max: { paymentDate: true },
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          bankSettlement: agg._sum.bankSettlement,
+          paymentDate: agg._max.paymentDate || order.paymentDate,
+        },
+      });
+    }
+
+    // Run matcher for profit calculation
+    const matchResult = await matchOrdersForUser(userId, platform, Array.from(touched));
+    await logUpload({ userId, platform, type: 'amazon-transaction', fileName, fileHash, rowCount: rows.length, inserted, updated, affectedIds: Array.from(touched) });
+
+    res.json({
+      success: true, type: 'amazon-transaction',
+      processed: rows.length, inserted, updated, returns,
+      uniqueOrders: touched.size, entriesStored: entries.length,
+      matched: matchResult.updated,
+      fileHash: fileHash.slice(0, 12) + '…',
+    });
+  } catch (err) {
+    console.error('Amazon transaction upload error:', err);
+    res.status(500).json({ error: 'Failed to parse Amazon transaction file: ' + err.message });
   }
 });
 
