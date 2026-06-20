@@ -51,6 +51,7 @@ export default function Dashboard() {
   const [profitData, setProfitData] = useState([]);
   const [ordersData, setOrdersData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [platformBreakdown, setPlatformBreakdown] = useState([]);
 
   // Filter mode: 'quick' (7/30/90 day buttons), 'month', or 'range'
   const [mode, setMode] = useState('quick');
@@ -86,6 +87,21 @@ export default function Dashboard() {
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, [params, base]);
+
+  // Fetch per-platform breakdown when in combined mode
+  useEffect(() => {
+    if (!isCombined) { setPlatformBreakdown([]); return; }
+    const platforms = (user?.plans || []).filter(p => p !== 'all');
+    Promise.all(
+      platforms.map(p =>
+        api.get('/dashboard/summary', { params, headers: { 'x-platform': p } })
+          .then(res => ({ platform: p, ...res.data }))
+          .catch(() => null)
+      )
+    ).then(results => {
+      setPlatformBreakdown(results.filter(Boolean));
+    });
+  }, [isCombined, params, user?.plans]);
 
   const cards = summary ? [
     { color: '#2563eb', icon: '📦', label: 'Total Orders',     value: fmt(summary.totalOrders) },
@@ -165,6 +181,29 @@ export default function Dashboard() {
             <div><span>Returned</span><strong>{fmt(summary.returnedOrders)}</strong></div>
             <div><span>Avg Profit</span><strong>{inr(summary.avgProfit)}</strong></div>
           </div>
+
+          {isCombined && platformBreakdown.length > 0 && (
+            <div className="platform-breakdown">
+              {platformBreakdown.map((pb) => {
+                const colors = { flipkart: '#2563eb', meesho: '#7c3aed', amazon: '#f97316' };
+                const icons = { flipkart: '🛒', meesho: '🛍️', amazon: '📦' };
+                return (
+                  <div key={pb.platform} className="breakdown-card" style={{ borderTopColor: colors[pb.platform] || '#64748b' }}>
+                    <div className="breakdown-header">
+                      <span className="breakdown-icon">{icons[pb.platform] || '📊'}</span>
+                      <span className="breakdown-name">{pb.platform.charAt(0).toUpperCase() + pb.platform.slice(1)}</span>
+                    </div>
+                    <div className="breakdown-stats">
+                      <div><span>Profit</span><strong className={pb.totalProfit >= 0 ? 'pos' : 'neg'}>{inr(pb.totalProfit)}</strong></div>
+                      <div><span>Revenue</span><strong>{inr(pb.totalRevenue)}</strong></div>
+                      <div><span>Orders</span><strong>{fmt(pb.totalOrders)}</strong></div>
+                      <div><span>Returned</span><strong>{fmt(pb.returnedOrders)}</strong></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className="stat-grid">
             {cards.map((c) => (

@@ -251,3 +251,62 @@
   width: 20px;
   height: 20px;
 }
+
+/* ───── Interactive user card + sign out ───── */
+.user-card-clickable {
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  border-radius: 10px;
+  padding: 10px !important;
+  margin: 0 -4px;
+  position: relative;
+}
+.user-card-clickable:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+.user-card-clickable:active {
+  transform: scale(0.98);
+}
+.user-settings-icon {
+  margin-left: auto;
+  font-size: 15px;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+.user-card-clickable:hover .user-settings-icon {
+  opacity: 0.7;
+}
+
+.signout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px !important;
+  margin-top: 6px;
+  background: transparent;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.signout-btn:hover {
+  background: #fef2f2;
+  border-color: #fecaca !important;
+  color: #dc2626;
+}
+.signout-btn:active {
+  transform: scale(0.97);
+}
+.signout-icon {
+  font-size: 16px;
+  transition: transform 0.2s;
+}
+.signout-btn:hover .signout-icon {
+  transform: rotate(-15deg);
+}
+

@@ -353,4 +353,49 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+// ---------- SHIPPING RATES (for Self Ship Amazon sellers) ----------
+router.get('/shipping-rates', authMiddleware, async (req, res) => {
+  try {
+    const rates = await prisma.shippingRate.findMany({
+      where: { userId: req.user.id },
+      orderBy: { minWeight: 'asc' },
+    });
+    res.json({ rates });
+  } catch (err) {
+    console.error('Shipping rates error:', err);
+    res.status(500).json({ error: 'Failed to fetch shipping rates' });
+  }
+});
+
+router.post('/shipping-rates', authMiddleware, async (req, res) => {
+  try {
+    const { minWeight, maxWeight, cost } = req.body || {};
+    if (minWeight === undefined || maxWeight === undefined || cost === undefined) {
+      return res.status(400).json({ error: 'minWeight, maxWeight, and cost are required' });
+    }
+    if (minWeight >= maxWeight || cost < 0) {
+      return res.status(400).json({ error: 'Invalid weight range or cost' });
+    }
+    const rate = await prisma.shippingRate.create({
+      data: { userId: req.user.id, minWeight: parseInt(minWeight), maxWeight: parseInt(maxWeight), cost: parseFloat(cost) },
+    });
+    res.json({ success: true, rate });
+  } catch (err) {
+    console.error('Shipping rate create error:', err);
+    res.status(500).json({ error: 'Failed to create shipping rate' });
+  }
+});
+
+router.delete('/shipping-rates/:id', authMiddleware, async (req, res) => {
+  try {
+    const rate = await prisma.shippingRate.findUnique({ where: { id: req.params.id } });
+    if (!rate || rate.userId !== req.user.id) return res.status(404).json({ error: 'Rate not found' });
+    await prisma.shippingRate.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Shipping rate delete error:', err);
+    res.status(500).json({ error: 'Failed to delete rate' });
+  }
+});
+
 module.exports = router;

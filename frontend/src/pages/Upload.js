@@ -120,6 +120,7 @@ export default function Upload() {
   const { user } = useAuth();
   const { platform } = useActivePlatform(user);
   const isMeesho = platform === 'meesho';
+  const isAmazon = platform === 'amazon';
 
   // Upload History state
   const [history, setHistory] = useState([]);
@@ -171,6 +172,8 @@ export default function Upload() {
           <p className="text-muted">
             {isMeesho
               ? 'Upload your Meesho payment file — one file contains everything.'
+              : isAmazon
+              ? 'Upload your Amazon Monthly Transaction CSV — orders, refunds, and reimbursements in one file.'
               : 'Upload Flipkart pickup, settlement, and return reports.'}
           </p>
         </div>
@@ -206,6 +209,39 @@ export default function Upload() {
               just one drop zone. <strong>RTO</strong> rows settle to ₹0; <strong>Return</strong> rows
               can be negative (reverse shipping). Both are flagged automatically and profit is taken
               straight from the <code>Final Settlement Amount</code>.
+            </p>
+          </div>
+        </>
+      ) : isAmazon ? (
+        <>
+          <div className="card how-card">
+            <h3>How it works</h3>
+            <div className="steps">
+              <div><span>1</span> Download <strong>Monthly Transaction CSV</strong> from Amazon Seller Central → Reports → Payments.</div>
+              <div><span>2</span> Upload the <strong>CSV</strong> below — orders, refunds, and reimbursements are read.</div>
+              <div><span>3</span> Fulfillment type (Easy Ship / Self Ship) is detected automatically per order.</div>
+              <div><span>4</span> Profit is computed from settlement minus purchase price.</div>
+            </div>
+          </div>
+
+          <div className="upload-grid">
+            <UploadZone
+              title="Amazon Monthly Transaction"
+              description="CSV — the Monthly Unified Transaction report from Amazon Seller Central. Contains orders, refunds, fees, and reimbursements."
+              accept=".csv,text/csv"
+              color="orange"
+              endpoint="/upload/amazon-transaction"
+              onResult={() => setRefreshTick((x) => x + 1)}
+            />
+          </div>
+
+          <div className="card hint-card">
+            <strong>📦 Amazon settlement in one file</strong>
+            <p>
+              Amazon's Monthly Transaction CSV includes all order types: regular sales, refunds,
+              SAFE-T reimbursements, and fee adjustments. The <code>total</code> column is the net
+              amount Amazon pays you per transaction. For <strong>Self Ship</strong> orders, set your
+              SKU weights and shipping rates in Settings to get accurate profit after shipping costs.
             </p>
           </div>
         </>
@@ -301,6 +337,7 @@ export default function Upload() {
                     'returns': { label: 'Return Received', bg: '#fef9c3', color: '#854d0e' },
                     'return-incoming': { label: 'Return Incoming', bg: '#fff7ed', color: '#c2410c' },
                     'meesho-payment': { label: 'Meesho Payment', bg: '#fdf2f8', color: '#be185d' },
+                    'amazon-transaction': { label: 'Amazon', bg: '#fff7ed', color: '#c2410c' },
                   };
                   const t = typeLabels[h.type] || { label: h.type, bg: '#f1f5f9', color: '#475569' };
                   return (

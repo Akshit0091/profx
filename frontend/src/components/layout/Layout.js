@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../utils/AuthContext';
 import Logo from '../Logo';
 import { useActivePlatform, PLATFORM_META, ALL_PLATFORM, ALL_META } from '../../utils/platforms';
@@ -7,6 +7,7 @@ import './Layout.css';
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
@@ -120,17 +121,20 @@ export default function Layout({ children }) {
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="user-card">
+          <div className="user-card user-card-clickable" onClick={() => navigate('/app/profile')} title="Profile & Settings">
             <div className="avatar">{(user?.email || '?').slice(0, 1).toUpperCase()}</div>
             {!collapsed && (
-              <div className="user-meta">
-                <div className="user-email" title={user?.email}>{user?.email}</div>
-                <div className="user-role">{user?.isAdmin ? 'Admin' : 'Seller'}</div>
-              </div>
+              <>
+                <div className="user-meta">
+                  <div className="user-email" title={user?.email}>{user?.name || user?.email}</div>
+                  <div className="user-role">{user?.isAdmin ? 'Admin' : 'Seller'}</div>
+                </div>
+                <span className="user-settings-icon">⚙</span>
+              </>
             )}
           </div>
-          <button className="signout-btn" onClick={logout} title="Sign out">
-            <span>⎋</span>
+          <button className="signout-btn" onClick={(e) => { e.stopPropagation(); logout(); }} title="Sign out">
+            <span className="signout-icon">⏻</span>
             {!collapsed && <span>Sign Out</span>}
           </button>
         </div>
