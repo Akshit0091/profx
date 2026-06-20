@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import api from '../utils/api';
 import { useAuth } from '../utils/AuthContext';
-import { useActivePlatform, ALL_PLATFORM } from '../utils/platforms';
+import { useActivePlatform, ALL_PLATFORM, PLATFORM_META } from '../utils/platforms';
 import './Dashboard.css';
 
 const fmt = (n) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -197,12 +197,12 @@ export default function Dashboard() {
             <div className="platform-breakdown">
               {platformBreakdown.map((pb) => {
                 const colors = { flipkart: '#2563eb', meesho: '#7c3aed', amazon: '#f97316' };
-                const icons = { flipkart: '🛒', meesho: '🛍️', amazon: '📦' };
+                const meta = PLATFORM_META[pb.platform] || {};
                 return (
                   <div key={pb.platform} className="breakdown-card" style={{ borderTopColor: colors[pb.platform] || '#64748b' }}>
                     <div className="breakdown-header">
-                      <span className="breakdown-icon">{icons[pb.platform] || '📊'}</span>
-                      <span className="breakdown-name">{pb.platform.charAt(0).toUpperCase() + pb.platform.slice(1)}</span>
+                      {meta.logo && <img src={meta.logo} alt="" className="breakdown-logo" />}
+                      <span className="breakdown-name">{meta.label || pb.platform}</span>
                     </div>
                     <div className="breakdown-stats">
                       <div><span>Profit</span><strong className={pb.totalProfit >= 0 ? 'pos' : 'neg'}>{inr(pb.totalProfit)}</strong></div>

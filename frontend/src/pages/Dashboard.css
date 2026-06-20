@@ -198,3 +198,8 @@
 }
 .breakdown-stats strong.pos { color: #059669; }
 .breakdown-stats strong.neg { color: #dc2626; }
+.breakdown-logo {
+  height: 22px;
+  max-width: 80px;
+  object-fit: contain;
+}
