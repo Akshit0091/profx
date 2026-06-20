@@ -92,10 +92,21 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isCombined) { setPlatformBreakdown([]); return; }
     const platforms = (user?.plans || []).filter(p => p !== 'all');
+    if (!platforms.length) return;
+
+    // Use fetch directly (not the api instance) so the x-platform header
+    // isn't overridden by the axios interceptor that forces 'all'.
+    const token = localStorage.getItem('token');
+    const baseUrl = api.defaults.baseURL || '/api';
+    const qs = new URLSearchParams(params).toString();
+
     Promise.all(
       platforms.map(p =>
-        api.get('/dashboard/summary', { params, headers: { 'x-platform': p } })
-          .then(res => ({ platform: p, ...res.data }))
+        fetch(`${baseUrl}/dashboard/summary?${qs}`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'x-platform': p }
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => data ? { platform: p, ...data } : null)
           .catch(() => null)
       )
     ).then(results => {
