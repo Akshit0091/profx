@@ -96,8 +96,8 @@ export default function Dashboard() {
 
     // Use fetch directly (not the api instance) so the x-platform header
     // isn't overridden by the axios interceptor that forces 'all'.
-    const token = localStorage.getItem('token');
-    const baseUrl = api.defaults.baseURL || '/api';
+    const token = localStorage.getItem('profx_token');
+    const baseUrl = api.defaults.baseURL;
     const qs = new URLSearchParams(params).toString();
 
     Promise.all(
