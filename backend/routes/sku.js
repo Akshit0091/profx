@@ -204,4 +204,101 @@ router.post('/bulk', upload.single('file'), async (req, res) => {
   }
 });
 
+// ---------- RATE CORRECTIONS ----------
+
+// Get all SKU correction timestamps for the current user+platform
+// Used by the Orders page to auto-badge loss orders.
+router.get('/corrections', async (req, res) => {
+  try {
+    const skus = await prisma.sKU.findMany({
+      where: { userId: req.user.id, platform: req.platform, ratesCorrectedAt: { not: null } },
+      select: { skuId: true, ratesCorrectedAt: true },
+    });
+    const corrections = {};
+    for (const s of skus) corrections[s.skuId] = s.ratesCorrectedAt;
+    res.json({ corrections });
+  } catch (err) {
+    console.error('Corrections list error:', err);
+    res.status(500).json({ error: 'Failed to fetch corrections' });
+  }
+});
+
+// Mark a SKU's rates as corrected (sets timestamp to now)
+router.post('/:id/mark-corrected', async (req, res) => {
+  try {
+    const existing = await prisma.sKU.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.userId !== req.user.id) return res.status(404).json({ error: 'SKU not found' });
+    const sku = await prisma.sKU.update({
+      where: { id: req.params.id },
+      data: { ratesCorrectedAt: new Date() },
+    });
+    res.json({ success: true, skuId: sku.skuId, ratesCorrectedAt: sku.ratesCorrectedAt });
+  } catch (err) {
+    console.error('Mark corrected error:', err);
+    res.status(500).json({ error: 'Failed to mark corrected' });
+  }
+});
+
+// Clear the correction timestamp (reset)
+router.post('/:id/unmark-corrected', async (req, res) => {
+  try {
+    const existing = await prisma.sKU.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.userId !== req.user.id) return res.status(404).json({ error: 'SKU not found' });
+    await prisma.sKU.update({ where: { id: req.params.id }, data: { ratesCorrectedAt: null } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Unmark corrected error:', err);
+    res.status(500).json({ error: 'Failed to unmark' });
+  }
+});
+
+// Mark corrected by SKU ID (string, not DB id) — used by Orders page quick action
+router.post('/mark-corrected-by-sku', async (req, res) => {
+  try {
+    const { skuId } = req.body || {};
+    if (!skuId) return res.status(400).json({ error: 'skuId required' });
+    const sku = await prisma.sKU.findUnique({
+      where: { skuId_userId_platform: { skuId, userId: req.user.id, platform: req.platform } },
+    });
+    if (!sku) return res.status(404).json({ error: 'SKU not found — set a purchase price first' });
+    const updated = await prisma.sKU.update({
+      where: { id: sku.id },
+      data: { ratesCorrectedAt: new Date() },
+    });
+    res.json({ success: true, skuId: updated.skuId, ratesCorrectedAt: updated.ratesCorrectedAt });
+  } catch (err) {
+    console.error('Mark corrected by SKU error:', err);
+    res.status(500).json({ error: 'Failed to mark corrected' });
+  }
+});
+
+// One-time migration: convert starred orders to rate corrections.
+// Finds all starred orders, gets unique SKUs, sets ratesCorrectedAt on those SKUs.
+router.post('/migrate-stars', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const platform = req.platform;
+    const starred = await prisma.order.findMany({
+      where: { userId, platform, isStarred: true, skuId: { not: null } },
+      select: { skuId: true },
+      distinct: ['skuId'],
+    });
+    const skuIds = starred.map(o => o.skuId).filter(Boolean);
+    let migrated = 0;
+    for (const skuId of skuIds) {
+      const sku = await prisma.sKU.findUnique({
+        where: { skuId_userId_platform: { skuId, userId, platform } },
+      });
+      if (sku && !sku.ratesCorrectedAt) {
+        await prisma.sKU.update({ where: { id: sku.id }, data: { ratesCorrectedAt: new Date() } });
+        migrated++;
+      }
+    }
+    res.json({ success: true, starredSkus: skuIds.length, migrated });
+  } catch (err) {
+    console.error('Migrate stars error:', err);
+    res.status(500).json({ error: 'Failed to migrate stars' });
+  }
+});
+
 module.exports = router;

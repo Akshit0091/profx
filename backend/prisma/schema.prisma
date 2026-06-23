@@ -69,6 +69,10 @@ model SKU {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // When the seller last marked "Rates Corrected" for this SKU on the marketplace.
+  // Used to auto-badge loss orders: corrected (before this date) vs check-again (after).
+  ratesCorrectedAt DateTime?
+
   @@unique([skuId, userId, platform])
   @@index([userId, platform])
 }

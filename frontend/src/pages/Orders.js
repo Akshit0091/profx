@@ -29,6 +29,13 @@ export default function Orders() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ orders: [], pagination: { total: 0, totalPages: 1 } });
   const [loading, setLoading] = useState(true);
+  const [corrections, setCorrections] = useState({}); // { skuId: ratesCorrectedAt }
+
+  const fetchCorrections = useCallback(() => {
+    api.get('/sku/corrections')
+      .then((res) => setCorrections(res.data.corrections || {}))
+      .catch(() => {});
+  }, []);
 
   const fetchOrders = useCallback(() => {
     setLoading(true);
@@ -38,7 +45,7 @@ export default function Orders() {
       .finally(() => setLoading(false));
   }, [filters, page]);
 
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { fetchOrders(); fetchCorrections(); }, [fetchOrders, fetchCorrections]);
 
   // Apply a quick range — also tags quickRange so the active pill is right
   const applyQuickRange = (key) => {
@@ -113,24 +120,31 @@ export default function Orders() {
     }
   };
 
-  // Toggle star — optimistic UI (no confirmation, just flip)
-  const toggleStar = async (order) => {
-    const next = !order.isStarred;
-    // Optimistic: update local state immediately so it feels instant
-    setData((d) => ({
-      ...d,
-      orders: d.orders.map((o) => (o.id === order.id ? { ...o, isStarred: next } : o)),
-    }));
+  // Mark rates corrected for a SKU (from the Orders page)
+  const markCorrected = async (skuId) => {
+    if (!skuId) return alert('No SKU ID on this order');
     try {
-      await api.patch(`/orders/${order.id}/star`, { starred: next });
+      await api.post('/sku/mark-corrected-by-sku', { skuId });
+      fetchCorrections();
     } catch (err) {
-      // Revert on failure
-      setData((d) => ({
-        ...d,
-        orders: d.orders.map((o) => (o.id === order.id ? { ...o, isStarred: !next } : o)),
-      }));
-      alert('Failed to update star');
+      alert(err.response?.data?.error || 'Failed to mark corrected');
     }
+  };
+
+  // Auto-badge for rate correction status
+  const rateBadge = (o) => {
+    if (o.profit == null || o.profit >= 0) return null;
+    if (o.isReturned) return null;
+    const correctedAt = o.skuId ? corrections[o.skuId] : null;
+    if (!correctedAt) {
+      return <span className="rate-badge rate-needs-attention" title="This SKU's marketplace rate hasn't been corrected yet">🔴 Needs Attention</span>;
+    }
+    const corrDate = new Date(correctedAt);
+    const dispDate = o.dispatchDate ? new Date(o.dispatchDate) : null;
+    if (dispDate && dispDate > corrDate) {
+      return <span className="rate-badge rate-check-again" title="Rate was corrected earlier, but this newer order is still a loss — re-check">⚠️ Check Again</span>;
+    }
+    return <span className="rate-badge rate-corrected" title="This order was before the rate correction — handled">✅ Corrected</span>;
   };
 
   // Inline settlement edit
@@ -265,10 +279,10 @@ export default function Orders() {
           type="button"
           className={`starred-filter-toggle ${filters.starred ? 'is-active' : ''}`}
           onClick={() => { setFilters({ ...filters, starred: !filters.starred }); setPage(1); }}
-          title={filters.starred ? 'Showing starred orders only — click to show all' : 'Show starred orders only'}
+          title={filters.starred ? 'Showing loss orders needing attention — click to show all' : 'Show only loss orders needing rate attention'}
         >
-          <span className="star-icon">{filters.starred ? '★' : '☆'}</span>
-          Starred only
+          <span className="star-icon">{filters.starred ? '🔴' : '○'}</span>
+          Needs Attention
         </button>
         <button className="btn btn-secondary" onClick={reset}>Reset</button>
       </div>
@@ -278,7 +292,7 @@ export default function Orders() {
           <table className="orders-table">
             <thead>
               <tr>
-                <th className="star-col"></th>
+                <th className="rate-check-col">Rate Check</th>
                 <th>Order Item ID</th>
                 <th>Order ID</th>
                 <th>SKU</th>
@@ -309,16 +323,17 @@ export default function Orders() {
                     : o.profit < 0 ? 'neg' : 'pos';
                   return (
                     <tr key={o.id} className={rowClass}>
-                      <td className="star-col">
-                        <button
-                          type="button"
-                          className={`star-btn ${o.isStarred ? 'is-on' : ''}`}
-                          onClick={() => toggleStar(o)}
-                          title={o.isStarred ? 'Unstar this order' : 'Star this order (mark as reviewed)'}
-                          aria-label={o.isStarred ? 'Unstar' : 'Star'}
-                        >
-                          {o.isStarred ? '★' : '☆'}
-                        </button>
+                      <td className="rate-check-col">
+                        {rateBadge(o)}
+                        {o.profit != null && o.profit < 0 && !o.isReturned && o.skuId && !corrections[o.skuId] && (
+                          <button
+                            className="btn btn-xs btn-mark-corrected"
+                            onClick={() => markCorrected(o.skuId)}
+                            title={`Mark ${o.skuId} as rate-corrected on marketplace`}
+                          >
+                            ✓ Mark Fixed
+                          </button>
+                        )}
                       </td>
                       <td className="mono">{o.orderItemId}</td>
                       <td className="mono">{o.orderId || '—'}</td>
