@@ -141,11 +141,11 @@
 }
 
 .row-returned {
-  background: #fffbeb !important;
+  background: #f5f3ff !important;
 }
 
 .row-returned td {
-  color: #78350f;
+  color: #4c1d95;
 }
 
 .row-returned .strike {
