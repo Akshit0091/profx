@@ -365,20 +365,54 @@
   background: #ecfdf5;
   color: #065f46;
 }
-.btn-mark-corrected {
-  display: block;
-  margin-top: 4px;
-  font-size: 10.5px !important;
-  padding: 2px 7px !important;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
-  border-radius: 5px;
+.btn-rate-fix {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
+  font-family: inherit;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
 }
-.btn-mark-corrected:hover {
-  background: #dbeafe;
+.btn-rate-fix:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.4);
+}
+.btn-rate-fix:active {
+  transform: scale(0.96);
+}
+
+.rate-filter-btn {
+  padding: 8px 14px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.rate-filter-btn:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: #fef2f2;
+}
+.rate-filter-btn.is-active {
+  background: #fef2f2;
+  border-color: #dc2626;
+  color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
 

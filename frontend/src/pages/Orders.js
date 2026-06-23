@@ -120,14 +120,22 @@ export default function Orders() {
     }
   };
 
-  // Mark rates corrected for a SKU (from the Orders page)
+  // Mark rates corrected for a SKU — optimistic, no page reload
   const markCorrected = async (skuId) => {
-    if (!skuId) return alert('No SKU ID on this order');
+    if (!skuId) return;
+    // Optimistic: update local state immediately
+    const now = new Date().toISOString();
+    setCorrections((prev) => ({ ...prev, [skuId]: now }));
     try {
       await api.post('/sku/mark-corrected-by-sku', { skuId });
-      fetchCorrections();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to mark corrected');
+      // Revert on failure
+      setCorrections((prev) => {
+        const next = { ...prev };
+        delete next[skuId];
+        return next;
+      });
+      alert(err.response?.data?.error || 'Failed — set a purchase price first');
     }
   };
 
@@ -277,12 +285,11 @@ export default function Orders() {
         </select>
         <button
           type="button"
-          className={`starred-filter-toggle ${filters.starred ? 'is-active' : ''}`}
+          className={`rate-filter-btn ${filters.starred ? 'is-active' : ''}`}
           onClick={() => { setFilters({ ...filters, starred: !filters.starred }); setPage(1); }}
-          title={filters.starred ? 'Showing loss orders needing attention — click to show all' : 'Show only loss orders needing rate attention'}
+          title={filters.starred ? 'Showing orders needing attention — click to show all' : 'Show only loss orders needing rate correction'}
         >
-          <span className="star-icon">{filters.starred ? '🔴' : '○'}</span>
-          Needs Attention
+          {filters.starred ? '🔴 Needs Attention' : '○ Needs Attention'}
         </button>
         <button className="btn btn-secondary" onClick={reset}>Reset</button>
       </div>
@@ -327,11 +334,11 @@ export default function Orders() {
                         {rateBadge(o)}
                         {o.profit != null && o.profit < 0 && !o.isReturned && o.skuId && !corrections[o.skuId] && (
                           <button
-                            className="btn btn-xs btn-mark-corrected"
-                            onClick={() => markCorrected(o.skuId)}
-                            title={`Mark ${o.skuId} as rate-corrected on marketplace`}
+                            className="btn-rate-fix"
+                            onClick={(e) => { e.stopPropagation(); markCorrected(o.skuId); }}
+                            title={`Mark "${o.skuId}" as rate-corrected on marketplace`}
                           >
-                            ✓ Mark Fixed
+                            ✓ Rate Fixed
                           </button>
                         )}
                       </td>
