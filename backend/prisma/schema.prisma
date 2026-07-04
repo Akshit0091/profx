@@ -31,6 +31,8 @@ model User {
   settlementEntries SettlementEntry[]
   uploadLogs   UploadLog[]
   shippingRates ShippingRate[]
+  supplierProducts SupplierProduct[]
+  skuMappings      SkuMapping[]
 }
 
 model Subscription {
@@ -190,4 +192,37 @@ model ShippingRate {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model SupplierProduct {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  publisher String?
+  title     String
+  className String?   // shown as "Class" in the supplier sheet
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mappings  SkuMapping[]
+
+  @@index([userId])
+}
+
+model SkuMapping {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sku               String
+  supplierProductId String
+  supplierProduct   SupplierProduct @relation(fields: [supplierProductId], references: [id], onDelete: Cascade)
+
+  qtyPerUnit        Int             @default(1)  // copies of this book per 1 order of the SKU
+
+  createdAt         DateTime @default(now())
+
+  @@index([userId, sku])
 }

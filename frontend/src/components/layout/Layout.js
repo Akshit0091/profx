@@ -23,15 +23,16 @@ export default function Layout({ children }) {
   })();
 
   const sellerNavAll = [
-    { to: '/app',         label: 'Dashboard',      icon: '📊', end: true },
-    { to: '/app/upload',  label: 'Upload Reports', icon: '📤' },
-    { to: '/app/orders',  label: 'Orders',         icon: '📋' },
-    { to: '/app/sku',     label: 'SKU Pricing',    icon: '🏷️' },
+    { to: '/app',                 label: 'Dashboard',      icon: '📊', end: true },
+    { to: '/app/upload',          label: 'Upload Reports', icon: '📤' },
+    { to: '/app/orders',          label: 'Orders',         icon: '📋' },
+    { to: '/app/sku',             label: 'SKU Pricing',    icon: '🏷️' },
+    { to: '/app/supplier-orders', label: 'Supplier Orders', icon: '📦' },
   ];
   // Combined view is dashboard-only — Upload / Orders / SKU are per-platform,
   // so hide them when 'All Platforms' is active.
   const sellerNav = isCombined
-    ? sellerNavAll.filter((i) => i.to === '/app')
+    ? sellerNavAll.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders')
     : sellerNavAll;
   const adminNav = [
     { to: '/admin', label: 'Admin Panel', icon: '⚙️' },

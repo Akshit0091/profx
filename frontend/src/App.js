@@ -20,6 +20,7 @@ import Dashboard from './pages/Dashboard';
 import Upload from './pages/Upload';
 import Orders from './pages/Orders';
 import SKUPricing from './pages/SKUPricing';
+import SupplierOrders from './pages/SupplierOrders';
 import Profile from './pages/Profile';
 import AdminPanel from './pages/AdminPanel';
 
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="/app/upload"    element={<ProtectedRoute><Upload /></ProtectedRoute>} />
           <Route path="/app/orders"    element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/app/sku"       element={<ProtectedRoute><SKUPricing /></ProtectedRoute>} />
+          <Route path="/app/supplier-orders" element={<ProtectedRoute><SupplierOrders /></ProtectedRoute>} />
           <Route path="/app/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
           <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
