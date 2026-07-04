@@ -238,6 +238,20 @@ router.post('/export', async (req, res) => {
       return res.status(400).json({ error: 'No lines to export' });
     }
 
+    // Sort A→Z: Publisher, then Class, then Title (case-insensitive, blanks last).
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    const cmp = (a, b) => {
+      // Blank values sort to the bottom within their group.
+      if (!a && b) return 1;
+      if (a && !b) return -1;
+      return a.localeCompare(b);
+    };
+    const sortedLines = [...lines].sort((x, y) =>
+      cmp(norm(x.publisher), norm(y.publisher)) ||
+      cmp(norm(x.className), norm(y.className)) ||
+      cmp(norm(x.title), norm(y.title))
+    );
+
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Order', {
       pageSetup: {
@@ -278,7 +292,7 @@ router.post('/export', async (req, res) => {
     });
 
     // Data rows — Title wraps within the cell; long names flow to next line.
-    lines.forEach((l, idx) => {
+    sortedLines.forEach((l, idx) => {
       const r = idx + 3;
       const vals = [
         String(l.publisher || ''),
