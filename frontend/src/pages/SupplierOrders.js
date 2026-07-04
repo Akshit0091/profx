@@ -44,11 +44,13 @@ function BookRow({ book, onChange, onRemove, canRemove }) {
   const [showSug, setShowSug] = useState(false);
   const debRef = useRef(null);
 
-  const search = useCallback((q) => {
+  const search = useCallback((q, publisher, className) => {
     if (debRef.current) clearTimeout(debRef.current);
     debRef.current = setTimeout(async () => {
       try {
-        const res = await api.get('/supplier-orders/products/search', { params: { q } });
+        const res = await api.get('/supplier-orders/products/search', {
+          params: { q, publisher: publisher || '', className: className || '' },
+        });
         setSuggestions(res.data.products || []);
         setShowSug(true);
       } catch { /* ignore */ }
@@ -57,11 +59,13 @@ function BookRow({ book, onChange, onRemove, canRemove }) {
 
   return (
     <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr 2fr 0.8fr 0.6fr auto', gap: 8, marginBottom: 6 }}>
-      <input placeholder="Publisher" value={book.publisher} onChange={(e) => onChange({ ...book, publisher: e.target.value })} style={inp} />
+      <input placeholder="Publisher" value={book.publisher}
+        onChange={(e) => { const v = e.target.value; onChange({ ...book, publisher: v }); if (book.title) search(book.title, v, book.className); }}
+        style={inp} />
       <div style={{ position: 'relative' }}>
         <input placeholder="Title" value={book.title}
-          onChange={(e) => { onChange({ ...book, title: e.target.value, supplierProductId: null }); search(e.target.value); }}
-          onFocus={() => book.title && search(book.title)}
+          onChange={(e) => { onChange({ ...book, title: e.target.value, supplierProductId: null }); search(e.target.value, book.publisher, book.className); }}
+          onFocus={() => book.title && search(book.title, book.publisher, book.className)}
           onBlur={() => setTimeout(() => setShowSug(false), 180)} style={inp} />
         {showSug && suggestions.length > 0 && (
           <div style={sugBox}>
@@ -77,7 +81,9 @@ function BookRow({ book, onChange, onRemove, canRemove }) {
           </div>
         )}
       </div>
-      <input placeholder="Class" value={book.className} onChange={(e) => onChange({ ...book, className: e.target.value })} style={inp} />
+      <input placeholder="Class" value={book.className}
+        onChange={(e) => { const v = e.target.value; onChange({ ...book, className: v }); if (book.title) search(book.title, book.publisher, v); }}
+        style={inp} />
       <input type="number" min="1" title="Copies of THIS book per 1 order of the SKU (combo multiplier)"
         value={book.qtyPerUnit} onChange={(e) => onChange({ ...book, qtyPerUnit: e.target.value })} style={inp} />
       {canRemove ? <button onClick={onRemove} style={{ ...btnGhost, color: '#e11' }}>✕</button> : <span style={{ width: 28 }} />}

@@ -92,22 +92,57 @@ router.post('/resolve', async (req, res) => {
 });
 
 // ---------- TYPEAHEAD: search existing supplier products ----------
+// Query params:
+//   q         - title text; ALL words must be present (any order), ranked by closeness
+//   publisher - if set, STRICT filter (exact, case-insensitive)
+//   className - if set, STRICT filter (exact, case-insensitive)
 router.get('/products/search', async (req, res) => {
   try {
     const userId = req.user.id;
     const q = String(req.query.q || '').trim();
+    const publisher = String(req.query.publisher || '').trim();
+    const className = String(req.query.className || '').trim();
+
+    // DB-level strict filters for publisher / class.
     const where = { userId };
-    if (q) {
-      where.OR = [
-        { title: { contains: q, mode: 'insensitive' } },
-        { publisher: { contains: q, mode: 'insensitive' } },
-      ];
-    }
-    const products = await prisma.supplierProduct.findMany({
+    if (publisher) where.publisher = { equals: publisher, mode: 'insensitive' };
+    if (className) where.className = { equals: className, mode: 'insensitive' };
+
+    // Pull the candidate set (bounded), then word-rank in Node.
+    const candidates = await prisma.supplierProduct.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
-      take: 15,
+      take: 200,
     });
+
+    let products = candidates;
+
+    if (q) {
+      const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+      const scored = [];
+      for (const p of candidates) {
+        const title = (p.title || '').toLowerCase();
+        // ALL typed words must appear somewhere in the title (any order).
+        const allPresent = words.every((w) => title.includes(w));
+        if (!allPresent) continue;
+        // Closeness score: exact-prefix + whole-word matches rank higher.
+        const titleWords = title.split(/\s+/);
+        let score = 0;
+        for (const w of words) {
+          if (titleWords.includes(w)) score += 3;        // whole-word hit
+          else if (title.includes(w)) score += 1;         // substring hit
+          if (title.startsWith(w)) score += 2;            // title starts with it
+        }
+        // Shorter titles that fully match are usually the better pick.
+        score += Math.max(0, 5 - Math.abs(titleWords.length - words.length));
+        scored.push({ p, score });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      products = scored.slice(0, 15).map((s) => s.p);
+    } else {
+      products = candidates.slice(0, 15);
+    }
+
     res.json({ products });
   } catch (err) {
     console.error('Product search error:', err);
