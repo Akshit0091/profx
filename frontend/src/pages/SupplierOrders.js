@@ -17,10 +17,23 @@ function OrderRow({ order, checked, onToggle }) {
   );
 }
 
-function PlatformSection({ platform, orders, checkedIds, onToggle, onToggleAll }) {
+function PlatformSection({ platform, orders, checkedIds, onToggle, onToggleAll, onToggleDate }) {
   if (!orders.length) return null;
   const allChecked = orders.every((o) => checkedIds.has(o.rowId));
   const checkedCount = orders.filter((o) => checkedIds.has(o.rowId)).length;
+
+  // Distinct dates (in first-seen order) with per-date selection state.
+  const dateMap = new Map();
+  for (const o of orders) {
+    const d = o.date || '(no date)';
+    if (!dateMap.has(d)) dateMap.set(d, []);
+    dateMap.get(d).push(o);
+  }
+  const dates = Array.from(dateMap.entries()).map(([date, list]) => {
+    const checked = list.filter((o) => checkedIds.has(o.rowId)).length;
+    return { date, total: list.length, checked, all: checked === list.length, some: checked > 0 && checked < list.length };
+  });
+
   return (
     <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: platform === 'meesho' ? '#fdf2f8' : '#eff6ff', borderBottom: '1px solid #e2e8f0' }}>
@@ -29,6 +42,30 @@ function PlatformSection({ platform, orders, checkedIds, onToggle, onToggleAll }
         <div style={{ flex: 1 }} />
         <button onClick={() => onToggleAll(platform, !allChecked)} style={btnGhostSm}>{allChecked ? 'Uncheck all' : 'Check all'}</button>
       </div>
+
+      {/* Horizontal date chips — tick a date to select all its orders */}
+      {dates.length > 1 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid #f1f5f9', background: '#fafafa' }}>
+          <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center', marginRight: 2 }}>Dates:</span>
+          {dates.map((d) => (
+            <button
+              key={d.date}
+              onClick={() => onToggleDate(platform, d.date, !d.all)}
+              title={`${d.checked}/${d.total} selected`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer',
+                border: `1px solid ${d.all ? '#16a34a' : d.some ? '#f59e0b' : '#cbd5e1'}`,
+                background: d.all ? '#dcfce7' : d.some ? '#fef9c3' : '#fff',
+                color: d.all ? '#15803d' : d.some ? '#b45309' : '#475569', fontWeight: 600,
+              }}
+            >
+              <span style={{ fontSize: 13 }}>{d.all ? '☑' : d.some ? '◪' : '☐'}</span>
+              {d.date} <span style={{ opacity: 0.7 }}>({d.total})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ maxHeight: 340, overflowY: 'auto' }}>
         {orders.map((o) => (
           <OrderRow key={o.rowId} order={o} checked={checkedIds.has(o.rowId)} onToggle={onToggle} />
@@ -60,12 +97,12 @@ function BookRow({ book, onChange, onRemove, canRemove }) {
   return (
     <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr 2fr 0.8fr 0.6fr auto', gap: 8, marginBottom: 6 }}>
       <input placeholder="Publisher" value={book.publisher}
-        onChange={(e) => { const v = e.target.value; onChange({ ...book, publisher: v }); if (book.title) search(book.title, v, book.className); }}
+        onChange={(e) => { const v = e.target.value; onChange({ ...book, publisher: v }); search(book.title, v, book.className); }}
         style={inp} />
       <div style={{ position: 'relative' }}>
         <input placeholder="Title" value={book.title}
           onChange={(e) => { onChange({ ...book, title: e.target.value, supplierProductId: null }); search(e.target.value, book.publisher, book.className); }}
-          onFocus={() => book.title && search(book.title, book.publisher, book.className)}
+          onFocus={() => search(book.title, book.publisher, book.className)}
           onBlur={() => setTimeout(() => setShowSug(false), 180)} style={inp} />
         {showSug && suggestions.length > 0 && (
           <div style={sugBox}>
@@ -201,6 +238,14 @@ export default function SupplierOrders() {
     return next;
   });
 
+  const toggleDate = (platform, date, check) => setCheckedIds((prev) => {
+    const next = new Set(prev);
+    orders
+      .filter((o) => o.platform === platform && (o.date || '(no date)') === date)
+      .forEach((o) => (check ? next.add(o.rowId) : next.delete(o.rowId)));
+    return next;
+  });
+
   const proceedToMap = async () => {
     const selected = orders.filter((o) => checkedIds.has(o.rowId));
     if (!selected.length) { setError('Select at least one order'); return; }
@@ -292,8 +337,8 @@ export default function SupplierOrders() {
               {loading ? 'Loading…' : `Continue with ${totalChecked} orders →`}
             </button>
           </div>
-          <PlatformSection platform="meesho" orders={meeshoOrders} checkedIds={checkedIds} onToggle={toggle} onToggleAll={toggleAll} />
-          <PlatformSection platform="flipkart" orders={flipkartOrders} checkedIds={checkedIds} onToggle={toggle} onToggleAll={toggleAll} />
+          <PlatformSection platform="meesho" orders={meeshoOrders} checkedIds={checkedIds} onToggle={toggle} onToggleAll={toggleAll} onToggleDate={toggleDate} />
+          <PlatformSection platform="flipkart" orders={flipkartOrders} checkedIds={checkedIds} onToggle={toggle} onToggleAll={toggleAll} onToggleDate={toggleDate} />
         </>
       )}
 
