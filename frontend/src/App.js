@@ -23,6 +23,7 @@ import SKUPricing from './pages/SKUPricing';
 import SupplierOrders from './pages/SupplierOrders';
 import Profile from './pages/Profile';
 import AdminPanel from './pages/AdminPanel';
+import InstallPrompt from './components/pwa/InstallPrompt';
 
 function FullScreenLoader() {
   return (
@@ -99,6 +100,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <InstallPrompt />
         </BrowserRouter>
       </AuthProvider>
     </HelmetProvider>
