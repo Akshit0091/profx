@@ -24,6 +24,7 @@ import SupplierOrders from './pages/SupplierOrders';
 import Profile from './pages/Profile';
 import AdminPanel from './pages/AdminPanel';
 import InstallPrompt from './components/pwa/InstallPrompt';
+import Onboarding from './components/pwa/Onboarding';
 
 function FullScreenLoader() {
   return (
@@ -100,6 +101,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <Onboarding />
           <InstallPrompt />
         </BrowserRouter>
       </AuthProvider>
