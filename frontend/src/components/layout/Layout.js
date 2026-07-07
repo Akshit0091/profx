@@ -5,7 +5,157 @@ import Logo from '../Logo';
 import { useActivePlatform, PLATFORM_META, ALL_PLATFORM, ALL_META } from '../../utils/platforms';
 import './Layout.css';
 
-/* ---- inline line icons (stroke, currentColor) ---- */
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_QUERY).matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    const onChange = (e) => setIsDesktop(e.matches);
+    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
+    return () => {
+      mq.removeEventListener ? mq.removeEventListener('change', onChange) : mq.removeListener(onChange);
+    };
+  }, []);
+  return isDesktop;
+}
+
+/* ============================================================
+   DESKTOP — original sidebar layout (look unchanged)
+   ============================================================ */
+function DesktopLayout({ user, logout, navigate, platform, switchPlatform, allowed, isCombined, daysLeft, collapsed, setCollapsed, children }) {
+  const sellerNavAll = [
+    { to: '/app',                 label: 'Dashboard',       icon: '📊', end: true },
+    { to: '/app/upload',          label: 'Upload Reports',  icon: '📤' },
+    { to: '/app/orders',          label: 'Orders',          icon: '📋' },
+    { to: '/app/sku',             label: 'SKU Pricing',     icon: '🏷️' },
+    { to: '/app/supplier-orders', label: 'Supplier Orders', icon: '📦' },
+  ];
+  const sellerNav = isCombined
+    ? sellerNavAll.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders')
+    : sellerNavAll;
+  const adminNav = [
+    { to: '/admin', label: 'Admin Panel', icon: '⚙️' },
+    { to: '/app',   label: 'Seller View', icon: '👁️', end: true },
+  ];
+
+  return (
+    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
+      <aside className="sidebar">
+        <div className="sidebar-top">
+          <div className="brand">
+            <Logo variant="icon" size={36} />
+            {!collapsed && (
+              <div className="brand-text">
+                <div className="brand-name">Profx</div>
+                <div className="brand-tag">Profit tracker</div>
+              </div>
+            )}
+          </div>
+          <button className="collapse-btn" onClick={() => setCollapsed((c) => !c)} title="Toggle sidebar">
+            {collapsed ? '›' : '‹'}
+          </button>
+        </div>
+
+        {allowed.length > 1 && (
+          <div className={`platform-switcher ${collapsed ? 'is-collapsed' : ''}`}>
+            {!collapsed && <div className="platform-switcher-label">Marketplace</div>}
+            <div className="platform-pills">
+              {allowed.map((p) => {
+                const meta = p === ALL_PLATFORM ? ALL_META : PLATFORM_META[p];
+                const active = p === platform;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`platform-pill ${active ? 'is-active' : ''}`}
+                    style={active ? { borderColor: meta.color, color: meta.color } : undefined}
+                    onClick={() => !active && switchPlatform(p)}
+                    title={meta.label}
+                    aria-label={meta.label}
+                  >
+                    {p === ALL_PLATFORM ? (
+                      <span className="platform-pill-emoji">{meta.emoji}</span>
+                    ) : (
+                      <img className="platform-pill-icon" src={meta.logo} alt="" />
+                    )}
+                    {!collapsed && <span className="platform-pill-label">{meta.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <nav className="sidenav">
+          {!collapsed && <div className="nav-section">Workspace</div>}
+          {sellerNav.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {!collapsed && <span className="nav-label">{item.label}</span>}
+            </NavLink>
+          ))}
+
+          {user?.isAdmin && (
+            <>
+              {!collapsed && <div className="nav-section">Admin</div>}
+              {adminNav.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  {!collapsed && <span className="nav-label">{item.label}</span>}
+                </NavLink>
+              ))}
+            </>
+          )}
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="user-card user-card-clickable" onClick={() => navigate('/app/profile')} title="Profile & Settings">
+            <div className="avatar">{(user?.email || '?').slice(0, 1).toUpperCase()}</div>
+            {!collapsed && (
+              <>
+                <div className="user-meta">
+                  <div className="user-email" title={user?.email}>{user?.name || user?.email}</div>
+                  <div className="user-role">{user?.isAdmin ? 'Admin' : 'Seller'}</div>
+                </div>
+                <span className="user-settings-icon">⚙</span>
+              </>
+            )}
+          </div>
+          <button className="signout-btn" onClick={(e) => { e.stopPropagation(); logout(); }} title="Sign out">
+            <span className="signout-icon">⏻</span>
+            {!collapsed && <span>Sign Out</span>}
+          </button>
+        </div>
+      </aside>
+
+      <main className="main">
+        {daysLeft !== null && daysLeft >= 0 && daysLeft <= 7 && !user?.isAdmin && (
+          <div className="sub-warning">
+            ⚠ Your subscription expires in <strong>{daysLeft} day{daysLeft === 1 ? '' : 's'}</strong>. Please renew to avoid interruption.
+          </div>
+        )}
+        <div className="main-inner">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+/* ============================================================
+   MOBILE — app shell (header + bottom tab bar + sheets)
+   ============================================================ */
 function Ic({ name, size = 24 }) {
   const c = {
     width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
@@ -39,26 +189,7 @@ function Ic({ name, size = 24 }) {
   }
 }
 
-export default function Layout({ children }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { platform, switchPlatform, allowed } = useActivePlatform(user);
-  const isCombined = platform === ALL_PLATFORM;
-
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [platformSheet, setPlatformSheet] = useState(false);
-
-  useEffect(() => { setMoreOpen(false); setPlatformSheet(false); }, [location.pathname]);
-
-  const daysLeft = (() => {
-    if (!user?.subscription?.currentPeriodEnd) return null;
-    const ms = new Date(user.subscription.currentPeriodEnd) - new Date();
-    return Math.ceil(ms / (1000 * 60 * 60 * 24));
-  })();
-
-  // Header title shows only for pages that have been redesigned to omit their
-  // own heading. Others fall back to a compact logo bar (no duplicate title).
+function MobileLayout({ user, logout, navigate, location, platform, switchPlatform, allowed, isCombined, daysLeft, moreOpen, setMoreOpen, platformSheet, setPlatformSheet, children }) {
   const header = (() => {
     if (location.pathname === '/app') {
       return {
@@ -71,7 +202,6 @@ export default function Layout({ children }) {
     return null;
   })();
 
-  // Core tabs adapt to combined mode (per-platform pages are hidden there).
   const coreTabs = isCombined
     ? [
         { to: '/app', label: 'Dashboard', icon: 'dashboard', end: true },
@@ -105,12 +235,7 @@ export default function Layout({ children }) {
 
           <div className="hdr-right">
             {multiPlatform && (
-              <button
-                type="button"
-                className="hdr-platform"
-                onClick={() => setPlatformSheet(true)}
-                aria-label="Switch marketplace"
-              >
+              <button type="button" className="hdr-platform" onClick={() => setPlatformSheet(true)} aria-label="Switch marketplace">
                 {isCombined ? (
                   <span className="hdr-platform-emoji">{activeMeta?.emoji}</span>
                 ) : (
@@ -119,12 +244,7 @@ export default function Layout({ children }) {
                 <Ic name="chevron" size={14} />
               </button>
             )}
-            <button
-              type="button"
-              className="hdr-avatar"
-              onClick={() => navigate('/app/profile')}
-              aria-label="Profile"
-            >
+            <button type="button" className="hdr-avatar" onClick={() => navigate('/app/profile')} aria-label="Profile">
               {initial}
             </button>
           </div>
@@ -143,27 +263,17 @@ export default function Layout({ children }) {
 
       <nav className="app-tabbar">
         {coreTabs.map((t) => (
-          <NavLink
-            key={t.to}
-            to={t.to}
-            end={t.end}
-            className={({ isActive }) => `tab ${isActive ? 'is-active' : ''}`}
-          >
+          <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => `tab ${isActive ? 'is-active' : ''}`}>
             <Ic name={t.icon} size={22} />
             <span>{t.label}</span>
           </NavLink>
         ))}
-        <button
-          type="button"
-          className={`tab ${moreOpen ? 'is-active' : ''}`}
-          onClick={() => setMoreOpen(true)}
-        >
+        <button type="button" className={`tab ${moreOpen ? 'is-active' : ''}`} onClick={() => setMoreOpen(true)}>
           <Ic name="more" size={22} />
           <span>More</span>
         </button>
       </nav>
 
-      {/* ---- More sheet ---- */}
       {moreOpen && (
         <div className="sheet-wrap" role="dialog" aria-label="More">
           <button className="sheet-scrim" aria-label="Close" onClick={() => setMoreOpen(false)} />
@@ -199,7 +309,6 @@ export default function Layout({ children }) {
         </div>
       )}
 
-      {/* ---- Platform switcher sheet ---- */}
       {platformSheet && (
         <div className="sheet-wrap" role="dialog" aria-label="Switch marketplace">
           <button className="sheet-scrim" aria-label="Close" onClick={() => setPlatformSheet(false)} />
@@ -231,5 +340,44 @@ export default function Layout({ children }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ============================================================
+   Root — picks layout by viewport width (updates live on resize)
+   ============================================================ */
+export default function Layout({ children }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { platform, switchPlatform, allowed } = useActivePlatform(user);
+  const isCombined = platform === ALL_PLATFORM;
+  const isDesktop = useIsDesktop();
+
+  const [collapsed, setCollapsed] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [platformSheet, setPlatformSheet] = useState(false);
+
+  useEffect(() => { setMoreOpen(false); setPlatformSheet(false); }, [location.pathname]);
+
+  const daysLeft = (() => {
+    if (!user?.subscription?.currentPeriodEnd) return null;
+    const ms = new Date(user.subscription.currentPeriodEnd) - new Date();
+    return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  })();
+
+  const shared = { user, logout, navigate, platform, switchPlatform, allowed, isCombined, daysLeft, children };
+
+  return isDesktop ? (
+    <DesktopLayout {...shared} collapsed={collapsed} setCollapsed={setCollapsed} />
+  ) : (
+    <MobileLayout
+      {...shared}
+      location={location}
+      moreOpen={moreOpen}
+      setMoreOpen={setMoreOpen}
+      platformSheet={platformSheet}
+      setPlatformSheet={setPlatformSheet}
+    />
   );
 }
