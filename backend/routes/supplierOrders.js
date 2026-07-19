@@ -5,6 +5,7 @@ const ExcelJS = require('exceljs');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
 const { parseMeeshoOrders, parseFlipkartOrders, collapseBySku } = require('../utils/supplierParser');
+const { seriesTypeOf, normalizeTitle } = require('../utils/titleNormalizer');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -20,18 +21,23 @@ router.use(authMiddleware, subscriptionMiddleware);
 // by platform. Collapsing + mapping happens later in /resolve on the checked set.
 router.post(
   '/parse',
-  upload.fields([{ name: 'meesho', maxCount: 1 }, { name: 'flipkart', maxCount: 1 }]),
+  upload.fields([{ name: 'meesho', maxCount: 20 }, { name: 'flipkart', maxCount: 20 }]),
   async (req, res) => {
     try {
       const files = req.files || {};
       let orders = [];
 
-      if (files.meesho && files.meesho[0]) {
-        orders = orders.concat(parseMeeshoOrders(files.meesho[0].buffer));
-      }
-      if (files.flipkart && files.flipkart[0]) {
-        orders = orders.concat(parseFlipkartOrders(files.flipkart[0].buffer));
-      }
+      // Parse every uploaded file; rowIds are namespaced per file so they stay unique.
+      (files.meesho || []).forEach((f, fileIdx) => {
+        const parsed = parseMeeshoOrders(f.buffer);
+        parsed.forEach((o) => { o.rowId = `${o.rowId}-f${fileIdx}`; });
+        orders = orders.concat(parsed);
+      });
+      (files.flipkart || []).forEach((f, fileIdx) => {
+        const parsed = parseFlipkartOrders(f.buffer);
+        parsed.forEach((o) => { o.rowId = `${o.rowId}-f${fileIdx}`; });
+        orders = orders.concat(parsed);
+      });
       if (!orders.length) {
         return res.status(400).json({ error: 'No pending orders found in the uploaded file(s).' });
       }
@@ -105,7 +111,7 @@ router.get('/products/search', async (req, res) => {
 
     // DB-level strict filters for publisher / class.
     const where = { userId };
-    if (publisher) where.publisher = { equals: publisher, mode: 'insensitive' };
+    if (publisher) where.publisher = { startsWith: publisher, mode: 'insensitive' };
     if (className) where.className = { equals: className, mode: 'insensitive' };
 
     // Pull the candidate set (bounded), then word-rank in Node.
@@ -167,9 +173,11 @@ router.post('/map', async (req, res) => {
 
     const created = [];
     for (const b of books) {
-      const title = String(b.title || '').trim();
-      if (!title) continue;
+      const rawTitle = String(b.title || '').trim();
+      if (!rawTitle) continue;
       const publisher = String(b.publisher || '').trim() || null;
+      // Auto-normalize Olympiad series titles (MTG etc.) to canonical form.
+      const title = normalizeTitle(rawTitle, publisher).normalized || rawTitle;
       const className = String(b.className || '').trim() || null;
       const qtyPerUnit = Math.max(1, parseInt(b.qtyPerUnit || 1, 10) || 1);
 
@@ -227,6 +235,48 @@ router.post('/unmap', async (req, res) => {
   }
 });
 
+// ---------- NORMALIZE EXISTING TITLES (one-time migration) ----------
+// GET  ?dryRun=1  -> preview what would change, writes nothing
+// POST            -> applies the changes
+// Only touches this user's own SupplierProducts. Titles that don't match an
+// Olympiad series pattern are left exactly as they are.
+async function runNormalize(userId, apply) {
+  const products = await prisma.supplierProduct.findMany({ where: { userId } });
+  const changes = [];
+  for (const p of products) {
+    const next = normalizeTitle(p.title, p.publisher).normalized;
+    if (next && next !== p.title) {
+      changes.push({ id: p.id, publisher: p.publisher || '', from: p.title, to: next });
+    }
+  }
+  if (apply) {
+    for (const c of changes) {
+      await prisma.supplierProduct.update({ where: { id: c.id }, data: { title: c.to } });
+    }
+  }
+  return { total: products.length, changed: changes.length, changes };
+}
+
+router.get('/normalize-titles', async (req, res) => {
+  try {
+    const result = await runNormalize(req.user.id, false);
+    res.json({ success: true, dryRun: true, ...result });
+  } catch (err) {
+    console.error('Normalize preview error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/normalize-titles', async (req, res) => {
+  try {
+    const result = await runNormalize(req.user.id, true);
+    res.json({ success: true, applied: true, ...result });
+  } catch (err) {
+    console.error('Normalize apply error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- GENERATE SUPPLIER SHEET ----------
 // Body: { supplierName, lines: [{ publisher, title, className, qty }] }
 // Printable A4 portrait format: merged bold title, bordered grid, fixed column
@@ -238,16 +288,17 @@ router.post('/export', async (req, res) => {
       return res.status(400).json({ error: 'No lines to export' });
     }
 
-    // Sort A→Z: Publisher, then Class, then Title (case-insensitive, blanks last).
+    // Sort A→Z: Publisher → Series Type (read from the title) → Class → Title.
+    // Blank values sort to the bottom within their group.
     const norm = (v) => String(v || '').trim().toLowerCase();
     const cmp = (a, b) => {
-      // Blank values sort to the bottom within their group.
       if (!a && b) return 1;
       if (a && !b) return -1;
       return a.localeCompare(b);
     };
     const sortedLines = [...lines].sort((x, y) =>
       cmp(norm(x.publisher), norm(y.publisher)) ||
+      cmp(norm(seriesTypeOf(x.title, x.publisher)), norm(seriesTypeOf(y.title, y.publisher))) ||
       cmp(norm(x.className), norm(y.className)) ||
       cmp(norm(x.title), norm(y.title))
     );
