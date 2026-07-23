@@ -1,7 +1,3 @@
-/* ============================================================
-   DESKTOP SIDEBAR (>=1024px) — original styles, unchanged look.
-   Rendered only by DesktopLayout, so these never affect mobile.
-   ============================================================ */
 .layout {
   display: flex;
   min-height: 100vh;
@@ -116,6 +112,22 @@
 .user-email { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-role { font-size: 11px; color: var(--text-muted); }
 
+.signout-btn {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.signout-btn:hover { background: var(--error-soft); color: var(--error); border-color: var(--error-soft); }
+
 .layout.collapsed .user-meta { display: none; }
 .layout.collapsed .user-card { justify-content: center; }
 
@@ -133,8 +145,7 @@
   width: 100%;
 }
 
-/* desktop subscription bar (scoped so it can't clash with the mobile one) */
-.main .sub-warning {
+.sub-warning {
   background: var(--warning-soft);
   color: var(--warning);
   padding: 10px 18px;
@@ -144,7 +155,35 @@
   border-bottom: 1px solid #fde68a;
 }
 
-/* ───── Platform switcher (desktop) ───── */
+.mobile-toggle {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 50;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  font-size: 18px;
+}
+
+@media (max-width: 768px) {
+  .main-inner { padding: 18px; }
+  .mobile-toggle { display: block; }
+  .sidebar {
+    position: fixed;
+    z-index: 49;
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+    box-shadow: var(--shadow-lg);
+  }
+  .layout.mobile-open .sidebar { transform: translateX(0); }
+}
+
+/* ───── Platform switcher ───── */
+/* ───── Platform switcher ───── */
 .platform-switcher {
   padding: 12px 14px 6px;
   border-bottom: 1px solid var(--border, #e2e8f0);
@@ -213,7 +252,7 @@
   height: 20px;
 }
 
-/* ───── Interactive user card + sign out (desktop) ───── */
+/* ───── Interactive user card + sign out ───── */
 .user-card-clickable {
   cursor: pointer;
   transition: background 0.15s, transform 0.1s;
@@ -271,147 +310,34 @@
   transform: rotate(-15deg);
 }
 
-/* ============================================================
-   MOBILE APP SHELL (<1024px) — rendered only by MobileLayout.
-   ============================================================ */
-.app-shell {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  overflow: hidden;
+
+/* ───── Sidebar scrollbar ─────
+   The sidenav scrolls once the nav list outgrows the viewport. Left unstyled,
+   the browser paints its default (dark, chunky on some systems) scrollbar over
+   the white sidebar, which reads as a stray vertical line + grip. These rules
+   make it thin and near-invisible until hovered. */
+.sidenav {
+  scrollbar-width: thin;                     /* Firefox */
+  scrollbar-color: transparent transparent;  /* thumb, track */
+}
+.sidenav:hover {
+  scrollbar-color: #cbd5e1 transparent;
 }
 
-.app-header {
-  flex: 0 0 auto;
-  background: var(--gradient);
-  color: #fff;
-  padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 14px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  box-shadow: 0 2px 12px rgba(37, 99, 235, 0.18);
-  z-index: 20;
+/* WebKit (Chrome, Edge, Safari) */
+.sidenav::-webkit-scrollbar {
+  width: 6px;
 }
-.app-header.compact { padding-bottom: 12px; }
-
-.hdr-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 40px;
+.sidenav::-webkit-scrollbar-track {
+  background: transparent;
 }
-.hdr-title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
-.hdr-brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
-.hdr-brand .logo-mark { box-shadow: none; }
-.hdr-sub { margin: 7px 0 0; font-size: 12.5px; line-height: 1.35; color: rgba(255, 255, 255, 0.85); }
-
-.hdr-right { display: flex; align-items: center; gap: 10px; }
-.hdr-platform {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: 36px; padding: 0 8px 0 6px;
-  border: 0; border-radius: 12px;
-  background: rgba(255, 255, 255, 0.18); color: #fff;
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  transition: background 0.15s ease;
+.sidenav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
 }
-.hdr-platform:active { background: rgba(255, 255, 255, 0.3); }
-.hdr-platform-icon { width: 22px; height: 22px; border-radius: 6px; background: #fff; object-fit: contain; }
-.hdr-platform-emoji { font-size: 18px; line-height: 1; }
-
-.hdr-avatar {
-  width: 36px; height: 36px; border: 0; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22); color: #fff;
-  font-weight: 700; font-size: 15px; display: grid; place-items: center;
-  transition: background 0.15s ease;
+.sidenav:hover::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
 }
-.hdr-avatar:active { background: rgba(255, 255, 255, 0.34); }
-
-.app-main {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 16px 14px calc(24px + env(safe-area-inset-bottom, 0px));
+.sidenav::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
-
-/* mobile subscription bar (scoped) */
-.app-main .sub-warning {
-  background: var(--warning-soft);
-  color: #92400e;
-  border: 1px solid #fcd9a3;
-  border-radius: var(--radius);
-  padding: 11px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 14px;
-}
-
-.app-tabbar {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: space-around;
-  align-items: stretch;
-  background: #fff;
-  border-top: 1px solid var(--border);
-  padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -2px 14px rgba(15, 23, 42, 0.05);
-  z-index: 20;
-}
-.tab {
-  flex: 1; border: 0; background: transparent;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 2px 0; color: var(--text-soft);
-  font-size: 10.5px; font-weight: 600; text-decoration: none;
-  transition: color 0.15s ease;
-}
-.tab:hover { text-decoration: none; }
-.tab.is-active { color: var(--primary); font-weight: 700; }
-.tab svg { display: block; }
-
-.sheet-wrap {
-  position: fixed; inset: 0; z-index: 2147482000;
-  display: flex; align-items: flex-end; justify-content: center;
-  animation: sheet-fade 0.22s ease both;
-}
-@keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
-
-.sheet-scrim {
-  position: absolute; inset: 0; border: 0; padding: 0;
-  background: rgba(9, 22, 45, 0.42);
-  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
-}
-.sheet {
-  position: relative; width: 100%; max-width: 460px;
-  margin: 0 8px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: #fff; border-radius: 22px; padding: 12px 12px 8px;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);
-  animation: sheet-rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes sheet-rise { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-.sheet-grip { display: block; width: 40px; height: 4px; border-radius: 999px; background: #e2e8f0; margin: 0 auto 10px; }
-.sheet-title { font-size: 13px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px 8px; }
-.sheet-list { display: flex; flex-direction: column; }
-
-.sheet-item {
-  display: flex; align-items: center; gap: 12px; width: 100%;
-  border: 0; background: transparent; padding: 13px 10px; border-radius: 12px;
-  font-size: 15px; font-weight: 600; color: var(--text);
-  text-decoration: none; text-align: left; transition: background 0.12s ease;
-}
-.sheet-item:hover { background: #f6f8fc; text-decoration: none; }
-.sheet-item:active { background: #eef2f9; }
-.sheet-item > span:nth-child(2) { flex: 1; }
-.sheet-item.is-active { background: #f2f7ff; }
-.sheet-item-danger { color: var(--error); }
-
-.sheet-ic {
-  width: 38px; height: 38px; border-radius: 11px;
-  display: grid; place-items: center;
-  background: #f1f5f9; color: var(--text-muted); flex-shrink: 0;
-}
-.sheet-item-danger .sheet-ic { background: var(--error-soft); color: var(--error); }
-.sheet-ic-plain { background: #fff; box-shadow: inset 0 0 0 1px var(--border); }
-.sheet-ic-plain img { width: 24px; height: 24px; object-fit: contain; }
-.sheet-emoji { font-size: 20px; }
-.sheet-check { display: inline-flex; }

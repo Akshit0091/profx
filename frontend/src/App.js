@@ -21,10 +21,9 @@ import Upload from './pages/Upload';
 import Orders from './pages/Orders';
 import SKUPricing from './pages/SKUPricing';
 import SupplierOrders from './pages/SupplierOrders';
+import ImageTools from './pages/ImageTools';
 import Profile from './pages/Profile';
 import AdminPanel from './pages/AdminPanel';
-import InstallPrompt from './components/pwa/InstallPrompt';
-import Onboarding from './components/pwa/Onboarding';
 
 function FullScreenLoader() {
   return (
@@ -95,14 +94,13 @@ export default function App() {
           <Route path="/app/orders"    element={<ProtectedRoute><Orders /></ProtectedRoute>} />
           <Route path="/app/sku"       element={<ProtectedRoute><SKUPricing /></ProtectedRoute>} />
           <Route path="/app/supplier-orders" element={<ProtectedRoute><SupplierOrders /></ProtectedRoute>} />
+          <Route path="/app/image-tools" element={<ProtectedRoute><ImageTools /></ProtectedRoute>} />
           <Route path="/app/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
           <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <Onboarding />
-          <InstallPrompt />
         </BrowserRouter>
       </AuthProvider>
     </HelmetProvider>

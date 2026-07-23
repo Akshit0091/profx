@@ -13,6 +13,7 @@ const resetRoutes     = require('./routes/reset');
 const contactRoutes   = require('./routes/contact');
 const oauthRoutes     = require('./routes/oauth');
 const supplierOrdersRoutes = require('./routes/supplierOrders');
+const imageToolsRoutes = require('./routes/imageTools');
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use('/api/sku',       skuRoutes);
 app.use('/api/upload',    uploadRoutes);
 app.use('/api/orders',    ordersRoutes);
 app.use('/api/supplier-orders', supplierOrdersRoutes);
+app.use('/api/image-tools', imageToolsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reset',     resetRoutes);
 app.use('/api/contact',   contactRoutes);
