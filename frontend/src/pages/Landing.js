@@ -35,6 +35,11 @@ const FEATURES = [
     title: 'Manual overrides',
     body: 'Edit any settlement, flag any order as returned. Your call beats the file when a marketplace gets weird.',
   },
+  {
+    icon: '🖼️',
+    title: 'Image Tools',
+    body: 'Bulk-process your listing images to cut the shipping charges marketplaces assign to your products. Upload, download, relist. All-platform plan only.',
+  },
 ];
 
 const HOW = [
@@ -239,6 +244,7 @@ export default function Landing() {
                 <li>✓ Excel export with full breakdown</li>
                 <li>✓ Manual settlement and return overrides</li>
                 <li>✓ Priority email support</li>
+                <li style={{ opacity: 0.45 }}>✗ Image Tools (all-platform plan)</li>
               </ul>
 
               <Link to="/signup" className="mk-btn mk-btn-ghost mk-btn-lg price-cta">
@@ -260,6 +266,7 @@ export default function Landing() {
               <ul className="price-features">
                 <li>✓ <strong>All three marketplaces</strong></li>
                 <li>✓ <strong>Combined dashboard</strong> across every platform</li>
+                <li>✓ <strong>Image Tools</strong> — cut shipping charges on your listings</li>
                 <li>✓ Unlimited orders, SKUs, and uploads</li>
                 <li>✓ Pickup, settlement, and return matching</li>
                 <li>✓ Real-time profit dashboard with custom date ranges</li>
