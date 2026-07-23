@@ -33,6 +33,7 @@ model User {
   shippingRates ShippingRate[]
   supplierProducts SupplierProduct[]
   skuMappings      SkuMapping[]
+  paymentRequests  PaymentRequest[]
 }
 
 model Subscription {
@@ -225,4 +226,22 @@ model SkuMapping {
   createdAt         DateTime @default(now())
 
   @@index([userId, sku])
+}
+
+model PaymentRequest {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planType   String
+  platforms  String[]  @default([])
+  amount     Int
+  upiRef     String
+  payerNote  String?
+  status     String    @default("pending")
+  adminNote  String?
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@index([userId])
+  @@index([status])
 }

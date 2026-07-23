@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import './AdminPanel.css';
+import PaymentRequests from './PaymentRequests';
 
 export default function AdminPanel() {
   const [stats, setStats] = useState(null);

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../utils/AuthContext';
 import Logo from '../Logo';
-import { useActivePlatform, PLATFORM_META, ALL_PLATFORM, ALL_META } from '../../utils/platforms';
+import { useActivePlatform, ownsAllPlatforms, PLATFORM_META, ALL_PLATFORM, ALL_META } from '../../utils/platforms';
 import './Layout.css';
 
 export default function Layout({ children }) {
@@ -13,6 +13,8 @@ export default function Layout({ children }) {
   const location = useLocation();
   const { platform, switchPlatform, allowed } = useActivePlatform(user);
   const isCombined = platform === ALL_PLATFORM;
+  // Image Tools ships with the all-platform (₹999) plan only.
+  const hasAllPlan = ownsAllPlatforms(user);
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
@@ -32,9 +34,13 @@ export default function Layout({ children }) {
   ];
   // Combined view is dashboard-only — Upload / Orders / SKU are per-platform,
   // so hide them when 'All Platforms' is active.
+  // Image Tools is hidden unless the seller is on the all-platform plan.
+  const visibleNav = hasAllPlan
+    ? sellerNavAll
+    : sellerNavAll.filter((i) => i.to !== '/app/image-tools');
   const sellerNav = isCombined
-    ? sellerNavAll.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders' || i.to === '/app/image-tools')
-    : sellerNavAll;
+    ? visibleNav.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders' || i.to === '/app/image-tools')
+    : visibleNav;
   const adminNav = [
     { to: '/admin', label: 'Admin Panel', icon: '⚙️' },
     { to: '/app',   label: 'Seller View', icon: '👁️', end: true },

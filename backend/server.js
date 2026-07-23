@@ -4,6 +4,7 @@ const cors = require('cors');
 
 const authRoutes      = require('./routes/auth');
 const paymentRoutes   = require('./routes/payment');
+const manualPaymentRoutes = require('./routes/manualPayment');
 const adminRoutes     = require('./routes/admin');
 const skuRoutes       = require('./routes/sku');
 const uploadRoutes    = require('./routes/upload');
@@ -36,6 +37,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/auth',      authRoutes);
 app.use('/api/payment',   paymentRoutes);
+app.use('/api/manual-payment', manualPaymentRoutes);
 app.use('/api/admin',     adminRoutes);
 app.use('/api/sku',       skuRoutes);
 app.use('/api/upload',    uploadRoutes);

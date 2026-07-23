@@ -3,6 +3,7 @@ const multer = require('multer');
 const archiver = require('archiver');
 const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
 const { normalizeImage, DEFAULTS } = require('../utils/imageProcessor');
+const { ALL_PLATFORMS } = require('../utils/platforms');
 
 const router = express.Router();
 
@@ -14,8 +15,25 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024, files: MAX_FILES },
 });
 
-// Cross-platform tool — no platformMiddleware.
-router.use(authMiddleware, subscriptionMiddleware);
+// Image Tools is part of the all-platform (₹999) plan only.
+// This is the real gate — hiding the sidebar link is cosmetic, anyone can call
+// the API directly, so access is enforced here on the server.
+const allPlansMiddleware = (req, res, next) => {
+  const user = req.user;
+  if (user && user.isAdmin) return next();
+  const plans = Array.isArray(user?.plans) ? user.plans : [];
+  const ownsAll = ALL_PLATFORMS.every((p) => plans.includes(p));
+  if (!ownsAll) {
+    return res.status(403).json({
+      error: 'Image Tools is available on the all-platform plan. Upgrade to unlock it.',
+      code: 'PLAN_UPGRADE_REQUIRED',
+    });
+  }
+  next();
+};
+
+// Cross-platform tool — no platformMiddleware, but all-plan gated.
+router.use(authMiddleware, subscriptionMiddleware, allPlansMiddleware);
 
 // ---------- SETTINGS ----------
 router.get('/defaults', (req, res) => {

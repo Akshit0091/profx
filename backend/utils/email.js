@@ -137,6 +137,41 @@ async function sendDeactivationEmail(user) {
   return sendEmail({ to: user.email, subject: 'Account deactivated — ProfX', html: baseTemplate('Deactivated', body) });
 }
 
+// Alerts the admin that a seller has submitted a manual (UPI/QR) payment
+// and is waiting on verification.
+async function notifyAdminManualPayment(user, request) {
+  const amount = (request.amount / 100).toFixed(2);
+  const planLabel = request.planType === 'all' ? 'All platforms' : (request.platforms || []).join(', ');
+  const body = `
+    <h2 style="margin:0 0 12px;font-size:20px;">Manual payment awaiting verification 💰</h2>
+    <p>A seller has submitted a UPI payment and is waiting for their account to be activated.</p>
+    <table cellpadding="8" style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:10px;">
+      <tr><td style="color:#64748b;">Seller</td><td style="text-align:right;font-weight:600;">${user.name || '-'}</td></tr>
+      <tr><td style="color:#64748b;">Email</td><td style="text-align:right;font-weight:600;">${user.email}</td></tr>
+      <tr><td style="color:#64748b;">Phone</td><td style="text-align:right;font-weight:600;">${user.phone || '-'}</td></tr>
+      <tr><td style="color:#64748b;">Plan</td><td style="text-align:right;font-weight:600;">${planLabel}</td></tr>
+      <tr><td style="color:#64748b;">Amount</td><td style="text-align:right;font-weight:600;">₹${amount}</td></tr>
+      <tr><td style="color:#64748b;">UPI reference</td><td style="text-align:right;font-family:monospace;font-size:13px;">${request.upiRef}</td></tr>
+      ${request.payerNote ? `<tr><td style="color:#64748b;">Note</td><td style="text-align:right;">${String(request.payerNote).replace(/[<>]/g, '')}</td></tr>` : ''}
+    </table>
+    <p style="margin-top:18px;">Verify this reference in your UPI app, then approve it in the admin panel.</p>
+    <p><a href="${process.env.FRONTEND_URL}/admin" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;">Open Admin Panel →</a></p>
+  `;
+  return sendEmail({ to: ADMIN_EMAIL, subject: '[ProfX] Manual payment awaiting verification', html: baseTemplate('Manual payment', body) });
+}
+
+// Tells a seller their manual payment could not be verified.
+async function sendManualPaymentRejected(user, adminNote) {
+  const body = `
+    <h2 style="margin:0 0 12px;font-size:20px;color:#dc2626;">We could not verify your payment</h2>
+    <p>Hi ${user.name || 'Seller'}, we were unable to verify the payment you submitted for ProfX.</p>
+    ${adminNote ? `<div style="background:#fef2f2;border-left:3px solid #dc2626;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0;">${String(adminNote).replace(/[<>]/g, '')}</div>` : ''}
+    <p>If you have already paid, please reply to this email with your UPI reference number and we will sort it out.</p>
+    <p><a href="${process.env.FRONTEND_URL}/payment" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;">Try again →</a></p>
+  `;
+  return sendEmail({ to: user.email, subject: 'Payment could not be verified — ProfX', html: baseTemplate('Payment not verified', body) });
+}
+
 module.exports = {
   sendEmail,
   sendWelcomeEmail,
@@ -145,4 +180,6 @@ module.exports = {
   notifyAdminNewSeller,
   sendDeactivationEmail,
   sendContactFormEmail,
+  notifyAdminManualPayment,
+  sendManualPaymentRejected,
 };

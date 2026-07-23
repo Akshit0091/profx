@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import api from '../utils/api';
+import { useAuth } from '../utils/AuthContext';
+import { ownsAllPlatforms } from '../utils/platforms';
 
 const MAX_FILES = 30;
 
 export default function ImageTools() {
+  const { user } = useAuth();
+  const hasAllPlan = ownsAllPlatforms(user);
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -72,6 +76,28 @@ export default function ImageTools() {
   };
 
   const totalMb = (files.reduce((s, f) => s + f.size, 0) / (1024 * 1024)).toFixed(1);
+
+  // Server enforces this too — this screen is just a friendlier message than a 403.
+  if (!hasAllPlan) {
+    return (
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '8px 4px' }}>
+        <h1 style={{ marginBottom: 4 }}>Image Tools</h1>
+        <div style={{ ...card, textAlign: 'center', padding: 32 }}>
+          <div style={{ fontSize: 42, lineHeight: 1, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>
+            Available on the all-platform plan
+          </div>
+          <p style={{ color: '#64748b', margin: '0 0 18px', lineHeight: 1.6 }}>
+            Image Tools is included with the ₹999/mo plan that covers Flipkart,
+            Meesho and Amazon together. Upgrade to unlock it.
+          </p>
+          <a href="/payment" style={{ ...btnPrimary, display: 'inline-block', textDecoration: 'none' }}>
+            View plans →
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '8px 4px' }}>
