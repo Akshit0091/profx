@@ -34,6 +34,7 @@ model User {
   supplierProducts SupplierProduct[]
   skuMappings      SkuMapping[]
   paymentRequests  PaymentRequest[]
+  printedLabels PrintedLabel[]
 }
 
 model Subscription {
@@ -244,4 +245,17 @@ model PaymentRequest {
   updatedAt  DateTime  @updatedAt
   @@index([userId])
   @@index([status])
+}
+
+
+model PrintedLabel {
+  id        String   @id @default(cuid())
+  userId    String
+  orderId   String   // e.g. "316218282222232320_1" — the Meesho "Order No." incl. suffix
+  printedAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, orderId]) // same seller can't have the same order printed "fresh" twice
+  @@index([userId])
 }
