@@ -214,3 +214,25 @@
   .le-preview { position: static; }
   .le-frame, .le-empty { height: 62vh; }
 }
+
+.le-span { grid-column: 1 / -1; }
+
+.le-note { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; margin: 0 0 14px; }
+.le-template-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.le-template-name {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

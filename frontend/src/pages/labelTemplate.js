@@ -1,46 +1,25 @@
-// Composes the Shoppix label sheet: logo band on top, the courier's label in
-// the middle with its tax invoice cut away, and the coupon / website bar /
-// thank-you block underneath.
+// Composes the branded label sheet: the seller's own artwork template is laid
+// down as the page, and each courier label is cut out of its tax invoice and
+// stamped into the blank middle of it.
 //
-// Every coordinate here is in PDF points on an A4 page (595 x 842) and was
-// measured off the approved artwork, so the output lines up with it.
-import { PDFDocument, PDFRawStream, StandardFonts, decodePDFRawStream, degrees, rgb } from 'pdf-lib';
+// The branding is never redrawn in code — it is stamped as vector artwork from
+// the template PDF, so the icons, fonts and spacing are exactly as designed.
+import {
+  PDFDocument, PDFName, PDFRawStream, decodePDFRawStream, rgb,
+  pushGraphicsState, popGraphicsState, setGraphicsState, rectangle, fill, setFillingColor,
+} from 'pdf-lib';
 
-export const PAGE_W = 595;
-export const PAGE_H = 842;
+export const TEMPLATE_URL = '/label-template.pdf';
 
-const LABEL_BOTTOM = 322.1;   // where the label's bottom edge rests
-const LABEL_CEILING = 702;    // the label may grow up to here before scaling
-const FOOT_TOP = 305;
-
-const COUPON = { x: 113.5, y: 215.5, w: 368, h: 86, stubW: 78 };
-const BAR = { x: 0.8, y: 122.8, w: 593.4, h: 74.3, baseline: 22.9 };
-const THANKS_BASE = 72.3;
-const SUB_BASE = 55;
-
-const BLACK = rgb(0.07, 0.07, 0.07);
-const GREY = rgb(0.45, 0.47, 0.5);
-const WHITE = rgb(1, 1, 1);
+// Breathing room between the label and the artwork above and below it.
+const PAD_BELOW = 15;
+const PAD_ABOVE = 6;
 
 export const TEMPLATE_DEFAULTS = {
-  logoOn: true,
   logoGreyscale: true,
-  logoHeight: 100,
-  couponOn: true,
-  stubText: 'ORDER NOW!',
-  flatText: 'FLAT',
-  percentText: '10%',
-  offText: 'OFF',
-  codeLabel: 'USE CODE :',
-  codeText: 'NEW10',
-  barOn: true,
-  barText: 'www.shoppixindia.com',
-  thanksOn: true,
-  thanksText: 'THANK YOU FOR YOUR ORDER!',
-  subText: 'Every book is checked by hand before it leaves our shelf.',
 };
 
-/* ---------------------- reading the source label ---------------------- */
+/* ------------------------- reading a PDF page ------------------------- */
 
 function streamText(page) {
   const contents = page.node.Contents();
@@ -60,6 +39,64 @@ function streamText(page) {
     }
   }
   return out;
+}
+
+// Every y a drawing operator touches, with the current translation applied.
+function inkYs(txt, height) {
+  const ys = [];
+  let ty = 0;
+  for (const raw of txt.split(/[\r\n]+/)) {
+    const line = raw.trim();
+    let m = /^q?\s*1 0 0 1 (-?[\d.]+) (-?[\d.]+) cm$/.exec(line);
+    if (m) { ty = parseFloat(m[2]); continue; }
+    if (line === 'Q') { ty = 0; continue; }
+
+    m = /^((?:-?[\d.]+\s+)+)(m|l|c|v|y|re)$/.exec(line);
+    if (m) {
+      const n = m[1].trim().split(/\s+/).map(Number);
+      if (m[2] === 're') {
+        ys.push(n[1] + ty, n[1] + n[3] + ty);
+      } else {
+        for (let i = 1; i < n.length; i += 2) ys.push(n[i] + ty);
+      }
+    }
+  }
+  const re = /([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) Tm/g;
+  let t;
+  while ((t = re.exec(txt))) ys.push(parseFloat(t[4]));
+
+  // Td/Tm pairs that the loop above misses (text placed without a matrix)
+  const re2 = /(-?[\d.]+)\s+(-?[\d.]+)\s+Td/g;
+  while ((t = re2.exec(txt))) ys.push(parseFloat(t[2]));
+
+  return ys.filter((y) => y >= 0 && y <= height);
+}
+
+/**
+ * The tallest band of the template with no artwork in it — where the label goes.
+ * Measured rather than hard-coded, so a redesigned template just works.
+ */
+export function findClearGap(page) {
+  const { height } = page.getSize();
+  const STEP = 2;
+  const slots = new Array(Math.ceil(height / STEP)).fill(false);
+  for (const y of inkYs(streamText(page), height)) {
+    const i = Math.floor(y / STEP);
+    // mark a little either side, so hairlines and glyph overhang still count
+    for (let k = Math.max(0, i - 1); k <= Math.min(slots.length - 1, i + 1); k++) slots[k] = true;
+  }
+
+  let best = { start: 0, end: 0 };
+  let run = -1;
+  for (let i = 0; i <= slots.length; i++) {
+    if (i < slots.length && !slots[i]) {
+      if (run < 0) run = i;
+    } else if (run >= 0) {
+      if (i - run > best.end - best.start) best = { start: run, end: i };
+      run = -1;
+    }
+  }
+  return { bottom: best.start * STEP, top: best.end * STEP };
 }
 
 // Where the shipping label stops and the invoice starts: the full-width rule
@@ -101,166 +138,56 @@ export function inspectPage(page) {
   const txt = streamText(page);
   const { width, height } = page.getSize();
   const cut = findInvoiceCut(txt);
-  const top = findContentTop(txt, height);
   return {
-    width, height,
+    width,
+    height,
     hasInvoice: cut !== null,
     cut: cut === null ? null : cut - 1,
-    top,
+    top: findContentTop(txt, height),
   };
 }
 
-/* ----------------------------- drawing ------------------------------- */
+/* ------------------------------ greyscale ----------------------------- */
 
-function dashedLine(page, x1, y1, x2, y2) {
-  page.drawLine({
-    start: { x: x1, y: y1 }, end: { x: x2, y: y2 },
-    thickness: 1.4, color: BLACK, dashArray: [5, 3.5],
-  });
-}
-
-// Saw-tooth edge down the right-hand side, the way a torn-off voucher looks.
-function zigzag(page, x, yBottom, yTop, depth = 7, period = 11) {
-  let y = yBottom;
-  let out = true;
-  let prev = { x: x - depth, y };
-  while (y < yTop) {
-    const next = Math.min(y + period / 2, yTop);
-    const point = { x: out ? x : x - depth, y: next };
-    page.drawLine({ start: prev, end: point, thickness: 1.4, color: BLACK });
-    prev = point;
-    y = next;
-    out = !out;
-  }
-}
-
-function drawCoupon(page, fonts, s) {
-  const { bold } = fonts;
-  const { x, y, w, h, stubW } = COUPON;
-
-  // Left stub — solid black, with the call to action set sideways. Each word
-  // gets its own line, stacked left to right, the way rotated text reads.
-  const stub = (s.stubText || '').trim();
-  page.drawRectangle({ x, y, width: stubW, height: h, color: BLACK });
-  if (stub) {
-    const words = stub.split(/\s+/).filter(Boolean);
-    const longest = Math.max(...words.map((wd) => bold.widthOfTextAtSize(wd, 1)));
-    const byLength = (h - 16) / longest;              // fits up the stub
-    const byStack = (stubW - 14) / (words.length * 1.15); // fits across it
-    const size = Math.max(7, Math.min(byLength, byStack, 30));
-    const lead = size * 1.15;
-    const firstCenter = x + stubW / 2 - ((words.length - 1) * lead) / 2;
-
-    words.forEach((word, i) => {
-      const len = bold.widthOfTextAtSize(word, size);
-      page.drawText(word, {
-        x: firstCenter + i * lead + size * 0.35,
-        y: y + (h - len) / 2,
-        size, font: bold, color: WHITE, rotate: degrees(90),
-      });
-    });
-  }
-
-  // dashed voucher body, torn down the right edge
-  const bx = x + stubW;
-  const bw = w - stubW;
-  dashedLine(page, bx, y + h, bx + bw - 7, y + h);
-  dashedLine(page, bx, y, bx + bw - 7, y);
-  dashedLine(page, bx, y, bx, y + h);
-  zigzag(page, bx + bw, y, y + h);
-
-  // offer wording, laid out around the same proportions as the artwork
-  const flat = (s.flatText || '').trim();
-  const pct = (s.percentText || '').trim();
-  const off = (s.offText || '').trim();
-  const code = (s.codeText || '').trim();
-  const label = (s.codeLabel || '').trim();
-
-  const flatSize = 42;
-  const pctSize = 47;
-  const offSize = 39;
-  const codeSize = 10;
-
-  const codeLine = [label, code].filter(Boolean).join(' ');
-  const codeTextW = bold.widthOfTextAtSize(codeLine, codeSize);
-  const flatW = flat ? bold.widthOfTextAtSize(flat, flatSize) : 0;
-  const leftW = Math.max(flatW, codeLine ? codeTextW + 18 : 0);
-  const rightW = Math.max(
-    pct ? bold.widthOfTextAtSize(pct, pctSize) : 0,
-    off ? bold.widthOfTextAtSize(off, offSize) : 0
+// Drops colour from one band of the page: a zero-saturation fill composited
+// with the Saturation blend mode keeps the brightness underneath and throws the
+// hue away. It needs opaque paper beneath it, which the white page provides.
+function greyscaleBand(doc, page, gsRef, y, h, width) {
+  page.node.setExtGState(PDFName.of('GsGray'), gsRef);
+  page.pushOperators(
+    pushGraphicsState(),
+    setGraphicsState('GsGray'),
+    setFillingColor(rgb(0.5, 0.5, 0.5)),
+    rectangle(0, y, width, h),
+    fill(),
+    popGraphicsState()
   );
-
-  const gap = 16;
-  const groupW = leftW + (leftW && rightW ? gap : 0) + rightW;
-  const startX = bx + (bw - 7 - groupW) / 2;
-
-  if (flat) {
-    page.drawText(flat, {
-      x: startX + (leftW - flatW) / 2, y: y + 35.9, size: flatSize, font: bold, color: BLACK,
-    });
-  }
-  if (codeLine) {
-    const boxW = Math.max(leftW, codeTextW + 18);
-    const boxX = startX + (leftW - boxW) / 2;
-    page.drawRectangle({ x: boxX, y: y + 13.7, width: boxW, height: 16.5, color: BLACK });
-    page.drawText(codeLine, {
-      x: boxX + (boxW - codeTextW) / 2, y: y + 18.6, size: codeSize, font: bold, color: WHITE,
-    });
-  }
-
-  const rightX = startX + leftW + gap;
-  if (pct) page.drawText(pct, { x: rightX, y: y + 46.7, size: pctSize, font: bold, color: BLACK });
-  if (off) page.drawText(off, { x: rightX, y: y + 14.5, size: offSize, font: bold, color: BLACK });
 }
 
-function drawBar(page, fonts, s) {
-  const text = (s.barText || '').trim();
-  page.drawRectangle({ x: BAR.x, y: BAR.y, width: BAR.w, height: BAR.h, color: BLACK });
-  if (!text) return;
-  const size = Math.min(52, ((BAR.w - 90) * 100) / fonts.bold.widthOfTextAtSize(text, 100));
-  const textW = fonts.bold.widthOfTextAtSize(text, size);
-  page.drawText(text, {
-    x: (PAGE_W - textW) / 2, y: BAR.y + BAR.baseline, size, font: fonts.bold, color: WHITE,
-  });
-}
-
-function drawThanks(page, fonts, s) {
-  const head = (s.thanksText || '').trim();
-  const sub = (s.subText || '').trim();
-  if (head) {
-    const size = Math.min(29, ((PAGE_W - 110) * 100) / fonts.boldItalic.widthOfTextAtSize(head, 100));
-    const w = fonts.boldItalic.widthOfTextAtSize(head, size);
-    page.drawText(head, {
-      x: (PAGE_W - w) / 2, y: THANKS_BASE, size, font: fonts.boldItalic, color: BLACK,
-    });
-  }
-  if (sub) {
-    const size = Math.min(10, ((PAGE_W - 120) * 100) / fonts.regular.widthOfTextAtSize(sub, 100));
-    const w = fonts.regular.widthOfTextAtSize(sub, size);
-    page.drawText(sub, { x: (PAGE_W - w) / 2, y: SUB_BASE, size, font: fonts.regular, color: GREY });
-  }
-}
-
-/* ---------------------------- composition ---------------------------- */
+/* ---------------------------- composition ----------------------------- */
 
 /**
- * @param {File[]} files        raw label sheets straight from the seller panel
- * @param {object} settings     see TEMPLATE_DEFAULTS
- * @param {{bytes:Uint8Array,kind:'png'|'jpg'}|null} logo
- * @param {number} [pageLimit]  stop after this many pages (used by the preview)
+ * @param {File[]} files          raw label sheets from the seller panel
+ * @param {Uint8Array} template   the branding artwork PDF
+ * @param {object} settings       see TEMPLATE_DEFAULTS
+ * @param {number} [pageLimit]    stop after this many pages (used by the preview)
  */
-export async function buildSheet({ files, settings, logo, pageLimit }) {
+export async function buildSheet({ files, template, settings, pageLimit }) {
   const out = await PDFDocument.create();
-  const fonts = {
-    regular: await out.embedFont(StandardFonts.Helvetica),
-    bold: await out.embedFont(StandardFonts.HelveticaBold),
-    boldItalic: await out.embedFont(StandardFonts.HelveticaBoldOblique),
-  };
 
-  let logoImg = null;
-  if (settings.logoOn && logo) {
-    logoImg = logo.kind === 'jpg' ? await out.embedJpg(logo.bytes) : await out.embedPng(logo.bytes);
+  const tplDoc = await PDFDocument.load(template, { ignoreEncryption: true });
+  const tplPage = tplDoc.getPage(0);
+  const { width: PW, height: PH } = tplPage.getSize();
+  const gap = findClearGap(tplPage);
+  if (gap.top - gap.bottom < 120) {
+    throw new Error('The branding template has no clear space in the middle for a label.');
   }
+  const [tpl] = await out.embedPages([tplPage]);
+
+  const gsRef = out.context.register(out.context.obj({ Type: 'ExtGState', BM: 'Saturation' }));
+
+  const labelBottom = gap.bottom + PAD_BELOW;
+  const ceiling = gap.top - PAD_ABOVE;
 
   let added = 0;
   let noInvoice = 0;
@@ -283,51 +210,26 @@ export async function buildSheet({ files, settings, logo, pageLimit }) {
         { left: 0, bottom: cutY, right: info.width, top: Math.min(info.top + 1, info.height) },
       ]);
 
-      const page = out.addPage([PAGE_W, PAGE_H]);
+      const page = out.addPage([PW, PH]);
+      page.drawRectangle({ x: 0, y: 0, width: PW, height: PH, color: rgb(1, 1, 1) });
+      page.drawPage(tpl, { x: 0, y: 0, width: PW, height: PH });
+      if (settings.logoGreyscale) greyscaleBand(out, page, gsRef, gap.top, PH - gap.top, PW);
 
-      // Full size for as long as possible: grow up into the gap beneath the
-      // logo first, then drop towards the coupon, and only scale as a last
+      // Full size for as long as possible: grow up into the gap under the logo
+      // first, then drop towards the artwork below, and only scale as a last
       // resort — the courier's barcode should print at its original size.
-      let bottom = LABEL_BOTTOM;
-      if (labelH > LABEL_CEILING - bottom) bottom = Math.max(FOOT_TOP + 2, LABEL_CEILING - labelH);
-      const room = LABEL_CEILING - bottom;
+      let bottom = labelBottom;
+      if (labelH > ceiling - bottom) bottom = Math.max(gap.bottom + 2, ceiling - labelH);
+      const room = ceiling - bottom;
       const scale = labelH > room ? room / labelH : 1;
       if (scale < 1) scaled++;
 
       page.drawPage(label, {
-        x: (PAGE_W - info.width * scale) / 2,
+        x: (PW - info.width * scale) / 2,
         y: bottom,
         width: info.width * scale,
         height: labelH * scale,
       });
-
-      if (logoImg) {
-        // Centred in the white space that is actually there — between the top
-        // of this page's label and the edge of the sheet. Labels differ in
-        // height, so a fixed band would leave the logo looking high on some
-        // pages and low on others. The artwork has already had its blank edges
-        // trimmed, so these are the true margins around the ink.
-        const labelTop = bottom + labelH * scale;
-        const bandH = PAGE_H - labelTop;
-        let lh = Math.max(20, Number(settings.logoHeight) || 100);
-        let lw = (logoImg.width / logoImg.height) * lh;
-        const maxW = PAGE_W - 60;
-        const maxH = Math.max(20, bandH - 16);
-        const fit = Math.min(lw > maxW ? maxW / lw : 1, lh > maxH ? maxH / lh : 1);
-        lw *= fit;
-        lh *= fit;
-
-        page.drawImage(logoImg, {
-          x: (PAGE_W - lw) / 2,
-          y: labelTop + (bandH - lh) / 2,
-          width: lw,
-          height: lh,
-        });
-      }
-
-      if (settings.couponOn) drawCoupon(page, fonts, settings);
-      if (settings.barOn) drawBar(page, fonts, settings);
-      if (settings.thanksOn) drawThanks(page, fonts, settings);
 
       added++;
     }
