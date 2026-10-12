@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './utils/AuthContext';
@@ -24,6 +24,9 @@ import SupplierOrders from './pages/SupplierOrders';
 import ImageTools from './pages/ImageTools';
 import Profile from './pages/Profile';
 import AdminPanel from './pages/AdminPanel';
+import LabelDuplicateChecker from './pages/LabelDuplicateChecker';
+// Pulls in pdf-lib, so it is split out of the main bundle.
+const LabelEditor = lazy(() => import('./pages/LabelEditor'));
 
 function FullScreenLoader() {
   return (
@@ -95,9 +98,12 @@ export default function App() {
           <Route path="/app/sku"       element={<ProtectedRoute><SKUPricing /></ProtectedRoute>} />
           <Route path="/app/supplier-orders" element={<ProtectedRoute><SupplierOrders /></ProtectedRoute>} />
           <Route path="/app/image-tools" element={<ProtectedRoute><ImageTools /></ProtectedRoute>} />
+          <Route path="/app/label-editor" element={<ProtectedRoute><Suspense fallback={<FullScreenLoader />}><LabelEditor /></Suspense></ProtectedRoute>} />
           <Route path="/app/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
           <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+
+          <Route path="/app/labels" element={<LabelDuplicateChecker />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

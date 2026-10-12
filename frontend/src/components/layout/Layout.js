@@ -31,6 +31,7 @@ export default function Layout({ children }) {
     { to: '/app/sku',             label: 'SKU Pricing',    icon: '🏷️' },
     { to: '/app/supplier-orders', label: 'Supplier Orders', icon: '📦' },
     { to: '/app/image-tools',     label: 'Image Tools',     icon: '🖼️' },
+    { to: '/app/label-editor',    label: 'Label Editor',    icon: '🖨️' },
   ];
   // Combined view is dashboard-only — Upload / Orders / SKU are per-platform,
   // so hide them when 'All Platforms' is active.
@@ -39,7 +40,7 @@ export default function Layout({ children }) {
     ? sellerNavAll
     : sellerNavAll.filter((i) => i.to !== '/app/image-tools');
   const sellerNav = isCombined
-    ? visibleNav.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders' || i.to === '/app/image-tools')
+    ? visibleNav.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders' || i.to === '/app/image-tools' || i.to === '/app/label-editor')
     : visibleNav;
   const adminNav = [
     { to: '/admin', label: 'Admin Panel', icon: '⚙️' },
