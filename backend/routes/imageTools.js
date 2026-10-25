@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const archiver = require('archiver');
 const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
-const { normalizeImage, DEFAULTS } = require('../utils/imageProcessor');
+const { normalizeImage, DEFAULTS, WATERMARK_DEFAULTS } = require('../utils/imageProcessor');
 const { ALL_PLATFORMS } = require('../utils/platforms');
 
 const router = express.Router();
@@ -37,7 +37,7 @@ router.use(authMiddleware, subscriptionMiddleware, allPlansMiddleware);
 
 // ---------- SETTINGS ----------
 router.get('/defaults', (req, res) => {
-  res.json({ defaults: DEFAULTS, maxFiles: MAX_FILES });
+  res.json({ defaults: DEFAULTS, watermark: WATERMARK_DEFAULTS, maxFiles: MAX_FILES });
 });
 
 // ---------- PROCESS A BATCH ----------
@@ -58,6 +58,16 @@ router.post('/process', upload.array('images', MAX_FILES), async (req, res) => {
     if (num(req.body.kbMin)) overrides.kbMin = num(req.body.kbMin);
     if (num(req.body.kbMax)) overrides.kbMax = num(req.body.kbMax);
     if (num(req.body.qualityFloor)) overrides.qualityFloor = num(req.body.qualityFloor);
+
+    // Faint ownership mark, used on the Amazon catalogue. Off unless asked for.
+    if (String(req.body.watermark) === 'true') {
+      overrides.watermark = {
+        text: String(req.body.watermarkText || '').trim() || WATERMARK_DEFAULTS.text,
+        opacity: num(req.body.watermarkOpacity) || WATERMARK_DEFAULTS.opacity,
+        scale: num(req.body.watermarkScale) || WATERMARK_DEFAULTS.scale,
+        mode: req.body.watermarkMode === 'center' ? 'center' : 'tile',
+      };
+    }
 
     // Process everything BEFORE streaming, so failure counts can go in headers
     // (headers can't be set once the response body has started).

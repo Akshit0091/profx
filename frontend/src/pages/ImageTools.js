@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import { useAuth } from '../utils/AuthContext';
-import { ownsAllPlatforms } from '../utils/platforms';
+import { ownsAllPlatforms, useActivePlatform } from '../utils/platforms';
 
 const MAX_FILES = 30;
 
@@ -20,6 +20,20 @@ export default function ImageTools() {
   const [kbMin, setKbMin] = useState(150);
   const [kbMax, setKbMax] = useState(300);
   const [qualityFloor, setQualityFloor] = useState(78);
+
+  // Faint ownership mark. Used on the Amazon catalogue, so it switches itself
+  // on when Amazon is the active marketplace — overridable either way.
+  const { platform } = useActivePlatform(user);
+  const [watermark, setWatermark] = useState(false);
+  const [wmText, setWmText] = useState('SHOPPIX_INDIA');
+  const [wmOpacity, setWmOpacity] = useState(3);
+  const [wmScale, setWmScale] = useState(100);
+  const [wmMode, setWmMode] = useState('tile');
+  const [wmTouched, setWmTouched] = useState(false);
+
+  useEffect(() => {
+    if (!wmTouched) setWatermark(platform === 'amazon');
+  }, [platform, wmTouched]);
 
   const pick = (e) => {
     const chosen = Array.from(e.target.files || []);
@@ -45,6 +59,13 @@ export default function ImageTools() {
       fd.append('kbMin', kbMin);
       fd.append('kbMax', kbMax);
       fd.append('qualityFloor', qualityFloor);
+      fd.append('watermark', String(watermark));
+      if (watermark) {
+        fd.append('watermarkText', wmText);
+        fd.append('watermarkOpacity', wmOpacity);
+        fd.append('watermarkScale', wmScale);
+        fd.append('watermarkMode', wmMode);
+      }
 
       const res = await api.post('/image-tools/process', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -129,6 +150,44 @@ export default function ImageTools() {
             </div>
           </div>
         )}
+
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={watermark}
+              onChange={(e) => { setWmTouched(true); setWatermark(e.target.checked); }}
+            />
+            <span>Add a faint watermark</span>
+            {platform === 'amazon' && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#c2410c', background: '#ffedd5', padding: '2px 8px', borderRadius: 999 }}>
+                on by default for Amazon
+              </span>
+            )}
+          </label>
+
+          {watermark && (
+            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Text</span>
+                <input value={wmText} onChange={(e) => setWmText(e.target.value)} style={inp} />
+              </label>
+              <Field label="Opacity %" value={wmOpacity} onChange={setWmOpacity} />
+              <Field label="Size %" value={wmScale} onChange={setWmScale} />
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Placement</span>
+                <select value={wmMode} onChange={(e) => setWmMode(e.target.value)} style={inp}>
+                  <option value="tile">Repeated across the image</option>
+                  <option value="center">One line across the middle</option>
+                </select>
+              </label>
+              <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+                3% is just perceptible on a white background. Raise it if you want it
+                easier to spot in a stolen copy.
+              </div>
+            </div>
+          )}
+        </div>
 
         <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={process} disabled={busy || !files.length} style={btnPrimary}>

@@ -20,6 +20,63 @@ const DEFAULTS = {
   qualityCeil: 95,
 };
 
+const WATERMARK_DEFAULTS = {
+  text: 'SHOPPIX_INDIA',
+  opacity: 3,            // percent — meant to be only just perceptible
+  scale: 100,            // percent of the stock lettering size
+  mode: 'tile',          // 'tile' | 'center'
+  angle: -30,
+};
+
+// XML-escape, so an ampersand in the text can't break the SVG overlay.
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * The watermark as an SVG the size of the canvas. Tiled mode repeats the text
+ * on a rotated lattice so it cannot be cropped off; centred mode places one
+ * line across the middle.
+ */
+function watermarkSvg(canvas, wm) {
+  const text = esc(String(wm.text || '').trim());
+  if (!text) return null;
+
+  const opacity = Math.min(60, Math.max(0.5, Number(wm.opacity) || 0)) / 100;
+  const scale = Math.min(400, Math.max(20, Number(wm.scale) || 100)) / 100;
+  const angle = Number.isFinite(Number(wm.angle)) ? Number(wm.angle) : -30;
+  const font = 'Arial, Helvetica, DejaVu Sans, sans-serif';
+
+  if (wm.mode === 'center') {
+    const size = Math.round((canvas / 14) * scale);
+    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${canvas}" height="${canvas}">
+  <text x="50%" y="50%" font-family="${font}" font-size="${size}" font-weight="bold"
+        fill="#000000" fill-opacity="${opacity}" text-anchor="middle" dominant-baseline="middle"
+        transform="rotate(${angle} ${canvas / 2} ${canvas / 2})">${text}</text>
+</svg>`);
+  }
+
+  // Tile cell is sized off the text so long names don't overlap themselves.
+  const size = Math.round((canvas / 40) * scale);
+  const cellW = Math.round(size * (text.length * 0.62 + 5));
+  const cellH = Math.round(size * 5.5);
+
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${canvas}" height="${canvas}">
+  <defs>
+    <pattern id="wm" width="${cellW}" height="${cellH}" patternUnits="userSpaceOnUse"
+             patternTransform="rotate(${angle})">
+      <text x="0" y="${Math.round(cellH / 2)}" font-family="${font}" font-size="${size}"
+            font-weight="bold" fill="#000000" fill-opacity="${opacity}">${text}</text>
+    </pattern>
+  </defs>
+  <rect width="${canvas}" height="${canvas}" fill="url(#wm)"/>
+</svg>`);
+}
+
 // Binary-search JPEG quality toward the KB window, clamped to the floor so a
 // detailed photo is never wrecked just to hit a size target.
 async function toKbWindow(buf, opts) {
@@ -60,6 +117,16 @@ async function normalizeImage(imgBuf, overrides = {}) {
   const left = Math.round((CANVAS - m.width) / 2);
   const top = Math.round((CANVAS - m.height) / 2);
 
+  const layers = [{ input: product, left, top }];
+
+  // The watermark goes on before the quality search, so what gets measured and
+  // compressed is the finished image rather than a clean one.
+  if (opts.watermark) {
+    const wm = { ...WATERMARK_DEFAULTS, ...opts.watermark };
+    const svg = watermarkSvg(CANVAS, wm);
+    if (svg) layers.push({ input: svg, left: 0, top: 0 });
+  }
+
   const composed = await sharp({
     create: {
       width: CANVAS,
@@ -68,7 +135,7 @@ async function normalizeImage(imgBuf, overrides = {}) {
       background: { r: 255, g: 255, b: 255 },
     },
   })
-    .composite([{ input: product, left, top }])
+    .composite(layers)
     .png()
     .toBuffer();
 
@@ -82,4 +149,4 @@ async function normalizeImage(imgBuf, overrides = {}) {
   };
 }
 
-module.exports = { normalizeImage, toKbWindow, DEFAULTS };
+module.exports = { normalizeImage, toKbWindow, DEFAULTS, WATERMARK_DEFAULTS };
