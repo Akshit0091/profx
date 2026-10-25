@@ -38,11 +38,12 @@ function esc(str) {
 }
 
 /**
- * The watermark as an SVG the size of the canvas. Tiled mode repeats the text
+ * The watermark as an SVG covering the given area. Tiled mode repeats the text
  * on a rotated lattice so it cannot be cropped off; centred mode places one
- * line across the middle.
+ * line across the middle. Lettering is sized off the shorter edge, so it looks
+ * the same on a square canvas and on a tall cover.
  */
-function watermarkSvg(canvas, wm) {
+function watermarkSvg(width, height, wm) {
   const text = esc(String(wm.text || '').trim());
   if (!text) return null;
 
@@ -50,22 +51,23 @@ function watermarkSvg(canvas, wm) {
   const scale = Math.min(400, Math.max(20, Number(wm.scale) || 100)) / 100;
   const angle = Number.isFinite(Number(wm.angle)) ? Number(wm.angle) : -30;
   const font = 'Arial, Helvetica, DejaVu Sans, sans-serif';
+  const base = Math.min(width, height);
 
   if (wm.mode === 'center') {
-    const size = Math.round((canvas / 14) * scale);
-    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${canvas}" height="${canvas}">
+    const size = Math.round((base / 14) * scale);
+    return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <text x="50%" y="50%" font-family="${font}" font-size="${size}" font-weight="bold"
         fill="#000000" fill-opacity="${opacity}" text-anchor="middle" dominant-baseline="middle"
-        transform="rotate(${angle} ${canvas / 2} ${canvas / 2})">${text}</text>
+        transform="rotate(${angle} ${width / 2} ${height / 2})">${text}</text>
 </svg>`);
   }
 
   // Tile cell is sized off the text so long names don't overlap themselves.
-  const size = Math.round((canvas / 40) * scale);
+  const size = Math.round((base / 40) * scale);
   const cellW = Math.round(size * (text.length * 0.62 + 5));
   const cellH = Math.round(size * 5.5);
 
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${canvas}" height="${canvas}">
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <defs>
     <pattern id="wm" width="${cellW}" height="${cellH}" patternUnits="userSpaceOnUse"
              patternTransform="rotate(${angle})">
@@ -73,7 +75,7 @@ function watermarkSvg(canvas, wm) {
             font-weight="bold" fill="#000000" fill-opacity="${opacity}">${text}</text>
     </pattern>
   </defs>
-  <rect width="${canvas}" height="${canvas}" fill="url(#wm)"/>
+  <rect width="${width}" height="${height}" fill="url(#wm)"/>
 </svg>`);
 }
 
@@ -123,7 +125,7 @@ async function normalizeImage(imgBuf, overrides = {}) {
   // compressed is the finished image rather than a clean one.
   if (opts.watermark) {
     const wm = { ...WATERMARK_DEFAULTS, ...opts.watermark };
-    const svg = watermarkSvg(CANVAS, wm);
+    const svg = watermarkSvg(CANVAS, CANVAS, wm);
     if (svg) layers.push({ input: svg, left: 0, top: 0 });
   }
 
@@ -149,4 +151,36 @@ async function normalizeImage(imgBuf, overrides = {}) {
   };
 }
 
-module.exports = { normalizeImage, toKbWindow, DEFAULTS, WATERMARK_DEFAULTS };
+/**
+ * Watermark and nothing else: same pixels, same dimensions, same format. No
+ * trim, no resize, no white canvas, no size targeting — the image comes back
+ * as supplied with the lettering laid over it.
+ */
+async function watermarkOnly(imgBuf, overrides = {}) {
+  const wm = { ...WATERMARK_DEFAULTS, ...overrides };
+  const meta = await sharp(imgBuf).metadata();
+  const width = meta.width;
+  const height = meta.height;
+  if (!width || !height) throw new Error('Could not read the image dimensions');
+
+  const svg = watermarkSvg(width, height, wm);
+  let pipeline = sharp(imgBuf).rotate();            // honour any EXIF orientation
+  if (svg) pipeline = pipeline.composite([{ input: svg, left: 0, top: 0 }]);
+
+  // Keep PNG as PNG so transparency survives; everything else goes out as a
+  // high-quality JPEG, which is what the marketplaces take.
+  const isPng = meta.format === 'png';
+  const buffer = isPng
+    ? await pipeline.png({ compressionLevel: 9 }).toBuffer()
+    : await pipeline.jpeg({ quality: 94, mozjpeg: true }).toBuffer();
+
+  return {
+    buffer,
+    ext: isPng ? 'png' : 'jpg',
+    width,
+    height,
+    kb: Math.round((buffer.length / 1024) * 10) / 10,
+  };
+}
+
+module.exports = { normalizeImage, watermarkOnly, toKbWindow, DEFAULTS, WATERMARK_DEFAULTS };

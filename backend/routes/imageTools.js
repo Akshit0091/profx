@@ -2,7 +2,9 @@ const express = require('express');
 const multer = require('multer');
 const archiver = require('archiver');
 const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
-const { normalizeImage, DEFAULTS, WATERMARK_DEFAULTS } = require('../utils/imageProcessor');
+const {
+  normalizeImage, watermarkOnly, DEFAULTS, WATERMARK_DEFAULTS,
+} = require('../utils/imageProcessor');
 const { ALL_PLATFORMS } = require('../utils/platforms');
 
 const router = express.Router();
@@ -59,15 +61,6 @@ router.post('/process', upload.array('images', MAX_FILES), async (req, res) => {
     if (num(req.body.kbMax)) overrides.kbMax = num(req.body.kbMax);
     if (num(req.body.qualityFloor)) overrides.qualityFloor = num(req.body.qualityFloor);
 
-    // Faint ownership mark, used on the Amazon catalogue. Off unless asked for.
-    if (String(req.body.watermark) === 'true') {
-      overrides.watermark = {
-        text: String(req.body.watermarkText || '').trim() || WATERMARK_DEFAULTS.text,
-        opacity: num(req.body.watermarkOpacity) || WATERMARK_DEFAULTS.opacity,
-        scale: num(req.body.watermarkScale) || WATERMARK_DEFAULTS.scale,
-        mode: req.body.watermarkMode === 'center' ? 'center' : 'tile',
-      };
-    }
 
     // Process everything BEFORE streaming, so failure counts can go in headers
     // (headers can't be set once the response body has started).
@@ -115,6 +108,68 @@ router.post('/process', upload.array('images', MAX_FILES), async (req, res) => {
     console.error('Image process error:', err);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Processing failed: ' + err.message });
+    }
+  }
+});
+
+// ---------- WATERMARK A BATCH ----------
+// Amazon's path. The image is returned exactly as uploaded apart from the
+// lettering — no trim, no resize, no canvas, no size targeting.
+router.post('/watermark', upload.array('images', MAX_FILES), async (req, res) => {
+  try {
+    const files = req.files || [];
+    if (!files.length) {
+      return res.status(400).json({ error: 'No images uploaded' });
+    }
+
+    const num = (v) => (v === undefined || v === '' ? undefined : Number(v));
+    const wm = {
+      text: String(req.body.text || '').trim() || WATERMARK_DEFAULTS.text,
+      opacity: num(req.body.opacity) || WATERMARK_DEFAULTS.opacity,
+      scale: num(req.body.scale) || WATERMARK_DEFAULTS.scale,
+      mode: req.body.mode === 'center' ? 'center' : 'tile',
+    };
+
+    const processed = [];
+    const failed = [];
+
+    for (const f of files) {
+      const base = String(f.originalname || 'image').replace(/\.[^.]+$/, '');
+      try {
+        const out = await watermarkOnly(f.buffer, wm);
+        processed.push({ name: `${base}.${out.ext}`, buffer: out.buffer });
+      } catch (err) {
+        console.error(`Watermark failed (${f.originalname}):`, err.message);
+        failed.push(f.originalname);
+      }
+    }
+
+    if (!processed.length) {
+      return res.status(422).json({
+        error: 'None of the uploaded files could be watermarked.',
+        failed,
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="watermarked-images.zip"');
+    res.setHeader('X-Processed-Count', String(processed.length));
+    res.setHeader('X-Failed-Count', String(failed.length));
+    res.setHeader('X-Failed-Files', encodeURIComponent(failed.join('|')));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Processed-Count, X-Failed-Count, X-Failed-Files');
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => {
+      console.error('Archive error:', err);
+      try { res.status(500).end(); } catch (_) { /* headers already sent */ }
+    });
+    archive.pipe(res);
+    for (const p of processed) archive.append(p.buffer, { name: p.name });
+    await archive.finalize();
+  } catch (err) {
+    console.error('Watermark error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Watermarking failed: ' + err.message });
     }
   }
 });
