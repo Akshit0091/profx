@@ -28,6 +28,11 @@ const upload = multer({
 const IMAGE_EDGE = 600;
 const IMAGE_QUALITY = 80;
 
+// How many photos to fetch at once. Sequential downloads made a batch of a
+// hundred books take minutes; eight at a time is a large speed-up without
+// hammering Meesho's CDN or exhausting the database connection pool.
+const IMAGE_CONCURRENCY = 8;
+
 // How long an indexed label stays scannable. A sheet is printed once and the
 // parcels leave within days, but a seller may re-scan a held or returned parcel
 // well after that, so the window is generous. The floor of 7 days is there so a
@@ -119,6 +124,23 @@ async function purgeExpiredLabels(userId) {
     where: { userId, createdAt: { lt: cutoff } },
   });
   return count;
+}
+
+/**
+ * Runs an async job over every item, keeping `limit` of them in flight. Enough
+ * to saturate the network without opening so many sockets to Meesho's CDN that
+ * it starts refusing them, or so many database writes that the pool runs dry.
+ */
+async function mapWithLimit(items, limit, job) {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      await job(items[index]);
+    }
+  });
+  await Promise.all(workers);
 }
 
 /**
@@ -340,10 +362,13 @@ router.post('/ingest', async (req, res) => {
       if (pictured.has(skuKeyOf(sku))) needed.delete(sku);
     }
 
+    // Fetched several at a time. One at a time meant a batch of 100 books took
+    // as long as 100 round trips to Meesho's CDN laid end to end, which on a
+    // modest host is minutes of the seller watching a progress line.
     let imagesSaved = 0;
     const imageErrors = [];
-    for (const [sku, { imageUrl, title }] of needed) {
-      let saved = false;
+
+    await mapWithLimit([...needed.entries()], IMAGE_CONCURRENCY, async ([sku, { imageUrl, title }]) => {
       for (const url of upscaleMeeshoUrl(imageUrl)) {
         try {
           const { data, width, height } = await fetchImage(url);
@@ -354,14 +379,13 @@ router.post('/ingest', async (req, res) => {
             create: { userId, sku, skuKey: skuKeyOf(sku), ...shared },
           });
           imagesSaved += 1;
-          saved = true;
-          break;
+          return;
         } catch (err) {
           // fall through to the next candidate URL
         }
       }
-      if (!saved) imageErrors.push(sku);
-    }
+      imageErrors.push(sku);
+    });
 
     res.json({
       success: true,

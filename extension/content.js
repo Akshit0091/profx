@@ -12,10 +12,15 @@
   window.__profxScanLoaded = true;
 
   const SUB_ORDER_RE = /\b(\d{15,20}_\d+)\b/;
-  const CHUNK = 150;          // rows per request to ProfX
-  const SETTLE_MS = 900;      // how long to let the table render after a scroll
+  // Small batches: the server fetches a photo per new SKU, so one huge request
+  // would sit there for minutes with nothing to show for it. 40 keeps the
+  // progress line moving and keeps any single request well short of a proxy
+  // timeout.
+  const CHUNK = 40;
+  const SETTLE_MS = 400;      // between scroll steps, where rows are already rendered
+  const BOTTOM_WAIT_MS = 1400; // at the bottom, where more may still be loading
   const STABLE_ROUNDS = 3;    // scrolls with no new rows before we call it done
-  const MAX_SCROLLS = 400;
+  const MAX_SCROLLS = 800;    // smaller steps means more of them
   const MAX_PAGES = 60;
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
 
@@ -191,12 +196,20 @@
         const added = harvest(findTable() || table, found);
         report(`Reading the list… ${found.size} orders`);
 
+        // Step down roughly one screen at a time rather than jumping to the
+        // bottom. The list only keeps the visible rows in the page, so a jump
+        // skips everything in between — which is how a 352-order list came
+        // back as 145.
         const before = box.scrollTop;
-        box.scrollTop = box.scrollHeight;
-        await sleep(SETTLE_MS);
+        const step = Math.max(200, Math.floor(box.clientHeight * 0.8));
+        box.scrollTop = Math.min(box.scrollTop + step, box.scrollHeight);
 
-        // Nothing new and nowhere further to scroll means this page is done.
-        if (added === 0 && box.scrollTop <= before + 2) stable += 1;
+        const atBottom = box.scrollTop <= before + 2;
+        // At the bottom there may be more still loading, so wait longer there
+        // than between ordinary steps.
+        await sleep(atBottom ? BOTTOM_WAIT_MS : SETTLE_MS);
+
+        if (added === 0 && atBottom) stable += 1;
         else stable = 0;
       }
       harvest(findTable() || table, found);
