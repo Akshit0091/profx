@@ -167,8 +167,14 @@ The app will open at **http://localhost:3000**.
 5. In the service **Variables** tab, add every env var from the local `.env` **except** `DATABASE_URL` (it's already injected)
 6. Set `NODE_ENV=production` and `FRONTEND_URL=https://<your-vercel-domain>`
 7. Railway runs `npm install`, then `npm run build`, then `npm start` — these are defined in `package.json`:
-   - `build`: `npx prisma generate && npx prisma db push --accept-data-loss`
+   - `build`: `npx prisma generate && npx prisma db push`
    - `start`: `node server.js`
+
+   > The `--accept-data-loss` flag is deliberately **not** on the `build` script. With
+   > it, a schema change that drops a column — and a rename looks like one to Prisma —
+   > would be applied silently against production. Without it, that deploy fails instead
+   > and you decide what to do. A change that loses no data still applies on its own, so
+   > ordinary deploys are unaffected.
 8. The service listens on `process.env.PORT` (Railway sets this automatically) and binds to `0.0.0.0` — no manual config needed
 9. Once deployed, copy the Railway public URL (e.g. `https://profx-api.up.railway.app`) — you'll plug it into Vercel next
 

@@ -4,7 +4,7 @@
   "description": "ProfX - Flipkart Seller Profit Tracker Backend",
   "main": "server.js",
   "scripts": {
-    "build": "npx prisma generate && npx prisma db push --accept-data-loss",
+    "build": "npx prisma generate && npx prisma db push",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "postinstall": "npx prisma generate"
