@@ -33,6 +33,14 @@ function beep() {
   }
 }
 
+// Which camera to open. Remembered because a packer scanning a stack of
+// labels should not have to correct it on every parcel.
+const FACING_KEY = 'profx.scan.facing';
+function rememberedFacing() {
+  try { return localStorage.getItem(FACING_KEY) === 'user' ? 'user' : 'environment'; }
+  catch { return 'environment'; }   // private windows can refuse outright
+}
+
 export default function ScanLabel() {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
@@ -41,6 +49,7 @@ export default function ScanLabel() {
   const [stats, setStats] = useState(null);
   const [manual, setManual] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [facing, setFacing] = useState(rememberedFacing);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -48,6 +57,9 @@ export default function ScanLabel() {
   const zxingRef = useRef(null);
   const lastRef = useRef({ code: '', at: 0 });
   const liveRef = useRef(false);
+  // Mirrors the facing state so that starting the camera does not have to
+  // wait for a render to know which one was asked for.
+  const facingRef = useRef(facing);
 
   const loadStats = useCallback(() => {
     api.get('/scan/stats').then(({ data }) => setStats(data)).catch(() => {});
@@ -98,7 +110,13 @@ export default function ScanLabel() {
   // on a desktop: a live track keeps the lamp on and drains the battery.
   useEffect(() => stop, [stop]);
 
-  const start = useCallback(async () => {
+  // `which` is omitted when this is a button handler, which passes an event.
+  const start = useCallback(async (which) => {
+    const want = which === 'user' || which === 'environment' ? which : facingRef.current;
+    facingRef.current = want;
+    setFacing(want);
+    try { localStorage.setItem(FACING_KEY, want); } catch { /* not worth failing over */ }
+
     setError('');
     setNotice('');
 
@@ -111,19 +129,30 @@ export default function ScanLabel() {
       return;
     }
 
+    const wanted = (mode) => ({
+      video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
+      // Ask for that camera by name. Some phones label their cameras in a way
+      // that makes a merely "ideal" request hand back the selfie one, which is
+      // no use pointed at a parcel.
+      stream = await navigator.mediaDevices.getUserMedia(wanted({ exact: want }));
     } catch (err) {
-      setError(
-        err.name === 'NotAllowedError'
-          ? 'Camera permission was refused. Allow it for this site and try again.'
-          : 'Could not open the camera: ' + err.message
-      );
-      return;
+      if (err.name === 'NotAllowedError') {
+        setError('Camera permission was refused. Allow it for this site and try again.');
+        return;
+      }
+      try {
+        // No camera answers to that name — a tablet with one lens, say. Take
+        // whatever there is rather than refusing to scan at all.
+        stream = await navigator.mediaDevices.getUserMedia(wanted({ ideal: want }));
+      } catch (err2) {
+        setError('Could not open the camera: ' + err2.message);
+        return;
+      }
     }
 
     streamRef.current = stream;
@@ -173,6 +202,13 @@ export default function ScanLabel() {
       stop();
     }
   }, [lookup, stop]);
+
+  /** Swaps to the other camera, reopening the stream on the new one. */
+  const flip = useCallback(() => {
+    const next = facingRef.current === 'environment' ? 'user' : 'environment';
+    stop();
+    start(next);
+  }, [start, stop]);
 
   // ---------- label sheet upload ----------
 
@@ -239,7 +275,14 @@ export default function ScanLabel() {
       <div className="scan-stage">
         {/* Kept mounted: attaching a stream to a video that does not exist yet
             is the usual cause of a black preview on iOS. */}
-        <video ref={videoRef} className={scanning ? 'scan-video' : 'scan-video hidden'} muted playsInline />
+        {/* The front camera is shown mirrored, as every other selfie view is;
+            it is only the display, so the decoder still sees the real frame. */}
+        <video
+          ref={videoRef}
+          className={`scan-video${scanning ? '' : ' hidden'}${facing === 'user' ? ' mirrored' : ''}`}
+          muted
+          playsInline
+        />
         {scanning && <div className="scan-reticle" aria-hidden="true" />}
         {!scanning && (
           <div className="scan-idle">
@@ -249,9 +292,16 @@ export default function ScanLabel() {
       </div>
 
       <div className="scan-actions">
-        {scanning
-          ? <button type="button" className="btn btn-stop" onClick={stop}>Stop camera</button>
-          : <button type="button" className="btn btn-go" onClick={start}>Start camera</button>}
+        {scanning ? (
+          <>
+            <button type="button" className="btn btn-stop" onClick={stop}>Stop camera</button>
+            <button type="button" className="btn btn-flip" onClick={flip}>
+              {facing === 'environment' ? 'Front camera' : 'Back camera'}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn btn-go" onClick={start}>Start camera</button>
+        )}
       </div>
 
       {error && <p className="scan-msg error">{error}</p>}

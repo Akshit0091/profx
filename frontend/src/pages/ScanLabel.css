@@ -34,6 +34,7 @@
   object-fit: cover;
 }
 .scan-video.hidden { display: none; }
+.scan-video.mirrored { transform: scaleX(-1); }
 
 .scan-idle {
   color: #cbd5e1;
@@ -58,7 +59,12 @@
   pointer-events: none;
 }
 
-.scan-actions { margin: 14px 0; }
+/* One button on its own fills the row; the flip sits beside Stop. */
+.scan-actions {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+}
 
 .btn {
   width: 100%;
@@ -72,6 +78,13 @@
 }
 .btn-go { background: var(--gradient); }
 .btn-stop { background: var(--error); }
+.btn-flip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
 .btn-secondary {
   width: auto;
   padding: 10px 16px;
