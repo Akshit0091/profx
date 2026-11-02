@@ -18,8 +18,9 @@
   // timeout.
   const CHUNK = 40;
   const SETTLE_MS = 400;      // between scroll steps, where rows are already rendered
-  const BOTTOM_WAIT_MS = 1400; // at the bottom, where more may still be loading
-  const STABLE_ROUNDS = 3;    // scrolls with no new rows before we call it done
+  const BOTTOM_WAIT_MS = 2000; // at the bottom, where more may still be loading
+  const STABLE_ROUNDS = 3;          // quiet rounds before the list is called finished
+  const STABLE_ROUNDS_PATIENT = 10; // ...but far more while the tab says there are more to come
   const MAX_SCROLLS = 800;    // smaller steps means more of them
   const MAX_PAGES = 60;
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
@@ -101,14 +102,37 @@
   // ---------- walking the whole list ----------
 
   /** The grid usually scrolls inside its own box rather than with the page. */
-  function scroller(table) {
+  /**
+   * Every box that might need scrolling, innermost first.
+   *
+   * The orders page has two: the grid scrolls inside its own box, and the page
+   * scrolls behind it. Driving only the inner one reaches the end of the rows
+   * currently loaded and stops, because it is the page scroll that makes Meesho
+   * fetch the next lot — which is how a 352-order list stopped at 263.
+   */
+  function scrollers(table) {
+    const boxes = [];
     let el = table.parentElement;
     while (el && el !== document.body) {
       const style = getComputedStyle(el);
-      if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 40) return el;
+      if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 40) boxes.push(el);
       el = el.parentElement;
     }
-    return document.scrollingElement || document.documentElement;
+    const page = document.scrollingElement || document.documentElement;
+    if (page && !boxes.includes(page)) boxes.push(page);
+    return boxes;
+  }
+
+  /**
+   * How many orders the tab says there are, e.g. "Ready to Ship (352)". Knowing
+   * the target is what tells the difference between a list that has ended and
+   * one that is still loading, so it is worth reading even though it is only a
+   * label on the page.
+   */
+  function expectedCount() {
+    const text = document.body ? (document.body.innerText || document.body.textContent || '') : '';
+    const m = text.match(/(?:Ready to Ship|Pending|On Hold|Shipped|Cancelled)\s*\((\d[\d,]*)\)/i);
+    return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
   }
 
   function harvest(table, into) {
@@ -180,7 +204,24 @@
     }
 
     const found = new Map();
-    const box = scroller(table);
+    const boxes = scrollers(table);
+    const box = boxes[0];
+    const target = expectedCount();
+
+    /**
+     * Advances the innermost box that still has somewhere to go, falling
+     * through to the page once the grid is at its end. Returns false only when
+     * nothing on the page can scroll any further.
+     */
+    const stepScroll = () => {
+      for (const b of boxes) {
+        const before = b.scrollTop;
+        const step = Math.max(200, Math.floor((b.clientHeight || 600) * 0.8));
+        b.scrollTop = Math.min(b.scrollTop + step, b.scrollHeight);
+        if (b.scrollTop > before + 2) return true;
+      }
+      return false;
+    };
 
     // Without a ceiling the scroll and page limits multiply out to hours. A
     // run over a few thousand orders finishes in minutes, so anything past
@@ -190,30 +231,35 @@
 
     for (let page = 0; page < MAX_PAGES; page += 1) {
       let stable = 0;
-      for (let i = 0; i < MAX_SCROLLS && stable < STABLE_ROUNDS; i += 1) {
+      for (let i = 0; i < MAX_SCROLLS; i += 1) {
         if (Date.now() > deadline) { ranOut = true; break; }
 
         const added = harvest(findTable() || table, found);
-        report(`Reading the list… ${found.size} orders`);
+        report(`Reading the list… ${found.size}${target ? ` of ${target}` : ''} orders`);
+
+        // Everything the tab promised is in hand, so there is nothing to be
+        // gained by scrolling on and waiting out the quiet rounds.
+        if (target && found.size >= target) break;
 
         // Step down roughly one screen at a time rather than jumping to the
         // bottom. The list only keeps the visible rows in the page, so a jump
-        // skips everything in between — which is how a 352-order list came
-        // back as 145.
-        const before = box.scrollTop;
-        const step = Math.max(200, Math.floor(box.clientHeight * 0.8));
-        box.scrollTop = Math.min(box.scrollTop + step, box.scrollHeight);
+        // skips everything in between.
+        const moved = stepScroll();
 
-        const atBottom = box.scrollTop <= before + 2;
-        // At the bottom there may be more still loading, so wait longer there
-        // than between ordinary steps.
-        await sleep(atBottom ? BOTTOM_WAIT_MS : SETTLE_MS);
+        // Nothing left to scroll usually means more is being fetched, so wait
+        // longer there than between ordinary steps.
+        await sleep(moved ? SETTLE_MS : BOTTOM_WAIT_MS);
 
-        if (added === 0 && atBottom) stable += 1;
+        if (added === 0 && !moved) stable += 1;
         else stable = 0;
+
+        // While the tab says there are more than we have, give the page far
+        // longer to produce them before concluding the list has ended.
+        const shortOfTarget = target && found.size < target;
+        if (stable >= (shortOfTarget ? STABLE_ROUNDS_PATIENT : STABLE_ROUNDS)) break;
       }
       harvest(findTable() || table, found);
-      report(`Reading the list… ${found.size} orders`);
+      report(`Reading the list… ${found.size}${target ? ` of ${target}` : ''} orders`);
       if (ranOut) break;
 
       const before = found.size;
@@ -226,7 +272,7 @@
       if (found.size === before) break;
     }
 
-    return { items: [...found.values()], ranOut };
+    return { items: [...found.values()], ranOut, target };
   }
 
   // ---------- sending ----------
@@ -247,7 +293,7 @@
    * nothing reaches the server and nothing is stored.
    */
   async function preview(report) {
-    const { items, ranOut } = await collectAll(report);
+    const { items, ranOut, target } = await collectAll(report);
     if (!items.length) {
       throw new Error(`Found no orders with a product photo. (What is here — ${describePage()})`);
     }
@@ -258,6 +304,7 @@
       scanned: items.length,
       withSku,
       ranOut,
+      target,
       sample: `${sample.subOrderId} · ${sample.sku || 'no SKU'} · ${(sample.title || '').slice(0, 40)}`,
     };
   }
@@ -266,12 +313,12 @@
     const status = await send('status');
     if (!status.signedIn) throw new Error('Sign in from the ProfX extension popup first.');
 
-    const { items, ranOut } = await collectAll(report);
+    const { items, ranOut, target } = await collectAll(report);
     if (!items.length) {
       throw new Error(`Found no orders with a product photo. (What is here — ${describePage()})`);
     }
 
-    const totals = { rows: 0, imagesSaved: 0, imagesSkipped: 0, unresolved: 0 };
+    const totals = { rows: 0, imagesSaved: 0, imagesSkipped: 0, unresolved: 0, target };
     for (let i = 0; i < items.length; i += CHUNK) {
       const batch = items.slice(i, i + CHUNK);
       report(`Saving ${Math.min(i + batch.length, items.length)} of ${items.length}…`);
@@ -301,6 +348,13 @@
 
   const tooSlow = (r) => (r.ranOut ? ' Stopped at the 10 minute limit — run it again to carry on.' : '');
 
+  // The tab says how many there should be, so say plainly when fewer were read
+  // rather than leaving a quiet shortfall to be noticed later.
+  const shortfall = (r) =>
+    (r.target && r.scanned < r.target
+      ? ` ${r.target - r.scanned} of the ${r.target} on this tab were not reached — scroll to the bottom yourself and run it again.`
+      : '');
+
   /** Both buttons behave the same way; only the work in between differs. */
   function wire(el, work, describe) {
     el.addEventListener('click', async () => {
@@ -322,13 +376,15 @@
   }
 
   wire(checkButton, preview, (r) =>
-    `Read ${r.scanned} orders, ${r.withSku} with a SKU. Nothing sent. ` +
-    `First: ${r.sample}. Full list in the browser console.${tooSlow(r)}`);
+    `Read ${r.scanned}${r.target ? ` of ${r.target}` : ''} orders, ${r.withSku} with a SKU. ` +
+    `Nothing sent. First: ${r.sample}. Full list in the browser console.` +
+    shortfall(r) + tooSlow(r));
 
   wire(button, run, (r) =>
-    `Done — ${r.scanned} orders, ${r.imagesSaved} new photos` +
+    `Done — ${r.scanned}${r.target ? ` of ${r.target}` : ''} orders, ${r.imagesSaved} new photos` +
     (r.imagesSkipped ? `, ${r.imagesSkipped} already saved` : '') +
-    (r.unresolved ? `, ${r.unresolved} with no SKU` : '') + tooSlow(r));
+    (r.unresolved ? `, ${r.unresolved} with no SKU` : '') +
+    shortfall(r) + tooSlow(r));
 
   const mount = () => document.body && document.body.appendChild(panel);
   if (document.body) mount();
