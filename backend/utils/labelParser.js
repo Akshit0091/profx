@@ -47,7 +47,9 @@ function cleanSubOrder(raw) {
  * is captured as whatever sits between the header and the size/qty/colour cells.
  */
 const PRODUCT_RE =
-  /Order No\.?\s*([\s\S]*?)\s+((?:Free\s+)?Size|XS|S|M|L|XL|XXL|XXXL|\d+)\s+(\d+)\s+(\S+)\s+(\d[\d\s]{13,24}_\s*\d+)/i;
+  // The \b after the size group matters: without it a bare "M" or "S" matches
+  // the first letter of an ordinary word and truncates the SKU.
+  /Order No\.?\s*([\s\S]*?)\s+((?:Free\s+)?Size|XS|S|M|L|XL|XXL|XXXL|\d+)\b\s+(\d+)\s+(\S+)\s+(\d[\d\s]{13,24}_\s*\d+)/i;
 
 function extractProduct(text) {
   const m = text.match(PRODUCT_RE);
@@ -82,10 +84,14 @@ function parsePage(text, pageIndex) {
   return { page: pageIndex + 1, awb, subOrderId, courier, ...extractProduct(text) };
 }
 
-/** Parses a label-sheet PDF into one record per page. */
-async function parseLabelPdf(buffer) {
-  const pages = await getPageTexts(buffer);
-  return pages.map(parsePage);
+/** One record per already-extracted page. */
+function parseLabelPages(pageTexts) {
+  return pageTexts.map(parsePage);
 }
 
-module.exports = { parseLabelPdf, parsePage, getPageTexts };
+/** Parses a label-sheet PDF into one record per page. */
+async function parseLabelPdf(buffer) {
+  return parseLabelPages(await getPageTexts(buffer));
+}
+
+module.exports = { parseLabelPdf, parseLabelPages, parsePage, getPageTexts };

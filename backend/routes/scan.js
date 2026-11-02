@@ -14,7 +14,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const { PrismaClient } = require('@prisma/client');
 const { authMiddleware, subscriptionMiddleware } = require('../middleware/auth');
-const { parseLabelPdf } = require('../utils/labelParser');
+const { parseScanSource } = require('../utils/scanSources');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -27,6 +27,16 @@ const upload = multer({
 // edge of 600px is already past what the screen can resolve.
 const IMAGE_EDGE = 600;
 const IMAGE_QUALITY = 80;
+
+// How long an indexed label stays scannable. A sheet is printed once and the
+// parcels leave within days, but a seller may re-scan a held or returned parcel
+// well after that, so the window is generous. The floor of 7 days is there so a
+// mistyped env var can never wipe the week currently being packed.
+const RETENTION_DAYS = Math.max(7, parseInt(process.env.SCAN_LABEL_RETENTION_DAYS, 10) || 90);
+
+// Photos are deliberately NOT subject to this. They are keyed by SKU, not by
+// order, and the same book ships for years — throwing one away would mean
+// re-running the extension to learn something already known.
 
 // Cross-platform by design, like supplier-orders: a label is a label whichever
 // marketplace printed it, so there is deliberately no platformMiddleware here.
@@ -95,6 +105,48 @@ function toDataUrl(record) {
   return `data:${record.mimeType};base64,${Buffer.from(record.data).toString('base64')}`;
 }
 
+/**
+ * Drops labels indexed longer ago than the retention window. Run on upload
+ * rather than on a timer: uploading is the only thing that grows the table, and
+ * this app has no scheduler to hang a nightly job from.
+ *
+ * Age is measured from when a label was first indexed, not last seen, so
+ * re-uploading an old sheet does not keep stale orders alive indefinitely.
+ */
+async function purgeExpiredLabels(userId) {
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await prisma.scanLabel.deleteMany({
+    where: { userId, createdAt: { lt: cutoff } },
+  });
+  return count;
+}
+
+/**
+ * Reduces a SKU to the part both documents agree on. A label sheet wraps
+ * "Chapter-wise" into "Chapter- wise"; a manifest splits "Assistant" into
+ * "A ssistant". Stripping to lowercase letters and digits made a real batch
+ * of 340 agree across both, where 61 of the raw strings differed.
+ */
+function skuKeyOf(sku) {
+  return String(sku || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * True when a stored row already says what this document says. SKUs are
+ * compared on skuKey, not the raw string, so uploading both the label sheet
+ * and the manifest for one batch is recognised as the same information twice
+ * rather than 61 spurious corrections.
+ */
+function unchanged(existing, row) {
+  return (
+    existing.awb === row.awb &&
+    existing.courier === row.courier &&
+    existing.skuKey === row.skuKey &&
+    existing.qty === (row.qty || 1) &&
+    existing.size === row.size
+  );
+}
+
 // ---------- 1. LABEL SHEET UPLOAD ----------
 // multipart/form-data, field "files" (the Sub_Order_Labels PDF, several allowed)
 //
@@ -106,57 +158,109 @@ router.post('/labels', upload.array('files', 20), async (req, res) => {
     const files = req.files || [];
     if (!files.length) return res.status(400).json({ error: 'No files uploaded' });
 
+    // Either the Sub Order Labels sheet or the Supplier Manifest will do, and
+    // the seller does not have to say which: each document is recognised from
+    // its own contents. Both carry AWB, sub-order and SKU.
     let parsed = [];
+    let units = 0;
+    const kinds = [];
     for (const file of files) {
+      let source;
       try {
-        parsed = parsed.concat(await parseLabelPdf(file.buffer));
+        source = await parseScanSource(file.buffer);
       } catch (err) {
         return res.status(400).json({
-          error: `Could not read "${file.originalname}". Is it the Sub Order Labels PDF from Meesho?`,
+          error: `Could not read "${file.originalname}". Is it a PDF?`,
         });
       }
+      if (!source.kind) {
+        return res.status(400).json({
+          error: `"${file.originalname}" is not a Meesho label sheet or supplier manifest.`,
+        });
+      }
+      parsed = parsed.concat(source.rows);
+      units += source.units;
+      kinds.push(source.kind);
     }
 
     const usable = parsed.filter((p) => p.subOrderId && p.sku);
-    const skipped = parsed.length - usable.length;
+    const unreadable = units - usable.length;
 
-    // Last page wins if a sheet repeats a sub-order, which happens when the
-    // seller downloads an overlapping range twice.
+    // Last page wins if one sheet repeats a sub-order, which happens when the
+    // seller downloads two overlapping ranges into the same PDF.
     const bySubOrder = new Map();
     for (const row of usable) bySubOrder.set(row.subOrderId, row);
+    const repeatedInFile = usable.length - bySubOrder.size;
 
-    let saved = 0;
-    for (const row of bySubOrder.values()) {
-      const data = {
-        orderNo: row.subOrderId.split('_')[0],
-        awb: row.awb,
-        courier: row.courier,
-        sku: row.sku,
-        qty: row.qty || 1,
-        size: row.size,
-      };
-      await prisma.scanLabel.upsert({
-        where: { userId_subOrderId: { userId, subOrderId: row.subOrderId } },
-        update: data,
-        create: { userId, subOrderId: row.subOrderId, ...data },
-      });
-      saved += 1;
+    const incoming = [...bySubOrder.values()].map((row) => ({
+      subOrderId: row.subOrderId,
+      orderNo: row.subOrderId.split('_')[0],
+      awb: row.awb,
+      courier: row.courier,
+      sku: row.sku,
+      skuKey: skuKeyOf(row.sku),
+      qty: row.qty || 1,
+      size: row.size,
+    }));
+
+    // Sheets overlap heavily in practice — a seller re-downloads the day's
+    // labels and most of them are already indexed. Reading first means a
+    // re-upload of 340 known labels writes nothing at all, instead of firing
+    // 340 pointless updates at the database.
+    const existing = await prisma.scanLabel.findMany({
+      where: { userId, subOrderId: { in: incoming.map((r) => r.subOrderId) } },
+      select: { subOrderId: true, awb: true, courier: true, sku: true, skuKey: true, qty: true, size: true },
+    });
+    const known = new Map(existing.map((r) => [r.subOrderId, r]));
+
+    const toCreate = [];
+    const toUpdate = [];
+    let duplicates = 0;
+    for (const row of incoming) {
+      const prior = known.get(row.subOrderId);
+      if (!prior) toCreate.push({ userId, ...row });
+      else if (unchanged(prior, row)) duplicates += 1;
+      else toUpdate.push(row);
     }
 
+    if (toCreate.length) {
+      // skipDuplicates covers the race of two uploads landing at once; the
+      // unique index on (userId, subOrderId) is what actually guarantees it.
+      await prisma.scanLabel.createMany({ data: toCreate, skipDuplicates: true });
+    }
+    for (const row of toUpdate) {
+      const { subOrderId, ...data } = row;
+      await prisma.scanLabel.update({
+        where: { userId_subOrderId: { userId, subOrderId } },
+        data,
+      });
+    }
+
+    const purged = await purgeExpiredLabels(userId);
+
     // Tell the seller which of these still have no photo, so they know whether
-    // running the extension is worth it before they start scanning.
-    const skus = [...new Set([...bySubOrder.values()].map((r) => r.sku))];
+    // running the extension is worth it before they start scanning. Counted by
+    // skuKey, or a book pictured under the orders page's spelling would be
+    // reported missing just because this document spells it differently.
+    const skus = [...new Set(incoming.map((r) => r.skuKey))];
     const haveImages = await prisma.productImage.findMany({
-      where: { userId, sku: { in: skus } },
-      select: { sku: true },
+      where: { userId, skuKey: { in: skus } },
+      select: { skuKey: true },
     });
-    const withImage = new Set(haveImages.map((r) => r.sku));
+    const withImage = new Set(haveImages.map((r) => r.skuKey));
 
     res.json({
       success: true,
       pages: parsed.length,
-      saved,
-      skipped,
+      added: toCreate.length,
+      duplicates,              // already stored, byte for byte — nothing written
+      updated: toUpdate.length, // same order, but the sheet disagreed with the index
+      repeatedInFile,
+      unreadable,
+      purged,
+      sources: [...new Set(kinds)], // "labels", "manifest", or both
+      retentionDays: RETENTION_DAYS,
+      scannable: incoming.length,
       distinctSkus: skus.length,
       skusMissingImage: skus.filter((s) => !withImage.has(s)).length,
     });
@@ -210,6 +314,7 @@ router.post('/ingest', async (req, res) => {
           subOrderId,
           orderNo: subOrderId.split('_')[0],
           sku,
+          skuKey: skuKeyOf(sku),
           title,
           qty: Number(item.qty) > 0 ? Number(item.qty) : 1,
         },
@@ -223,11 +328,17 @@ router.post('/ingest', async (req, res) => {
     }
 
     // Skip SKUs already pictured — re-running the extension should be cheap.
+    // Matched on skuKey as well as the raw string, so the same book spelled two
+    // ways by two documents is not downloaded twice.
+    const wantedKeys = [...needed.keys()].map(skuKeyOf);
     const existing = await prisma.productImage.findMany({
-      where: { userId, sku: { in: [...needed.keys()] } },
-      select: { sku: true },
+      where: { userId, OR: [{ sku: { in: [...needed.keys()] } }, { skuKey: { in: wantedKeys } }] },
+      select: { sku: true, skuKey: true },
     });
-    for (const row of existing) needed.delete(row.sku);
+    const pictured = new Set(existing.map((r) => r.skuKey));
+    for (const sku of [...needed.keys()]) {
+      if (pictured.has(skuKeyOf(sku))) needed.delete(sku);
+    }
 
     let imagesSaved = 0;
     const imageErrors = [];
@@ -236,10 +347,11 @@ router.post('/ingest', async (req, res) => {
       for (const url of upscaleMeeshoUrl(imageUrl)) {
         try {
           const { data, width, height } = await fetchImage(url);
+          const shared = { data, width, height, sourceUrl: url, title, mimeType: 'image/webp' };
           await prisma.productImage.upsert({
             where: { userId_sku: { userId, sku } },
-            update: { data, width, height, sourceUrl: url, title, mimeType: 'image/webp' },
-            create: { userId, sku, data, width, height, sourceUrl: url, title, mimeType: 'image/webp' },
+            update: shared,
+            create: { userId, sku, skuKey: skuKeyOf(sku), ...shared },
           });
           imagesSaved += 1;
           saved = true;
@@ -291,9 +403,15 @@ router.get('/lookup', async (req, res) => {
       });
     }
 
-    const image = await prisma.productImage.findUnique({
+    // Exact spelling first, so an exact match is never passed over for a
+    // normalised one. The fallback is what lets a manifest-indexed order find
+    // a photo the extension saved under the orders page's own spelling.
+    let image = await prisma.productImage.findUnique({
       where: { userId_sku: { userId, sku: label.sku } },
     });
+    if (!image && label.skuKey) {
+      image = await prisma.productImage.findFirst({ where: { userId, skuKey: label.skuKey } });
+    }
 
     res.json({
       found: true,
@@ -319,20 +437,26 @@ router.get('/lookup', async (req, res) => {
 router.get('/stats', async (req, res) => {
   try {
     const userId = req.user.id;
-    const [labels, images, withAwb] = await Promise.all([
+    const [labels, images, withAwb, oldest] = await Promise.all([
       prisma.scanLabel.count({ where: { userId } }),
       prisma.productImage.count({ where: { userId } }),
       prisma.scanLabel.count({ where: { userId, awb: { not: null } } }),
+      prisma.scanLabel.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
     ]);
 
     const skus = await prisma.scanLabel.findMany({
       where: { userId },
-      select: { sku: true },
-      distinct: ['sku'],
+      select: { skuKey: true },
+      distinct: ['skuKey'],
     });
     const pictured = await prisma.productImage.findMany({
-      where: { userId, sku: { in: skus.map((s) => s.sku) } },
-      select: { sku: true },
+      where: { userId, skuKey: { in: skus.map((s) => s.skuKey) } },
+      select: { skuKey: true },
+      distinct: ['skuKey'],
     });
 
     res.json({
@@ -341,6 +465,8 @@ router.get('/stats', async (req, res) => {
       images,
       distinctSkus: skus.length,
       skusMissingImage: skus.length - pictured.length,
+      retentionDays: RETENTION_DAYS,
+      oldestLabelAt: oldest?.createdAt || null,
     });
   } catch (err) {
     console.error('Scan stats error:', err);

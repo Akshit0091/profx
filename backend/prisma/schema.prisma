@@ -273,11 +273,21 @@ model ScanLabel {
 
   subOrderId String // "347365437691724416_1" — Meesho's Order No. incl. suffix
   orderNo    String // the same without the "_1", since some barcodes drop it
-  awb        String? // courier tracking no. Formats differ per courier, and the
-  // extension can't see it, so it stays null until the PDF lands.
-  courier    String?
 
-  sku   String
+  // Courier tracking no. Formats differ per courier, and the extension cannot
+  // see it, so it stays null until a label sheet or manifest lands.
+  awb     String?
+  courier String?
+
+  sku    String
+  // The same SKU reads differently depending on which document it came from:
+  // a label sheet wraps "Chapter-wise" into "Chapter- wise", a manifest splits
+  // "Assistant" into "A ssistant". skuKey is that text reduced to lowercase
+  // letters and digits — on a real 340-parcel batch it made the label sheet and
+  // the manifest agree on all 340, where the raw strings disagreed on 61. It is
+  // what a photo is matched on when the raw spellings differ.
+  skuKey String
+
   title String? // product name as the orders page shows it
   qty   Int     @default(1)
   size  String?
@@ -289,6 +299,7 @@ model ScanLabel {
   @@index([userId, awb])
   @@index([userId, orderNo])
   @@index([userId, sku])
+  @@index([userId, skuKey])
 }
 
 // The product picture, stored once per SKU rather than per order: the same book
@@ -300,6 +311,7 @@ model ProductImage {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   sku       String
+  skuKey    String // see ScanLabel.skuKey
   title     String?
   sourceUrl String? // the Meesho CDN URL it was fetched from, for re-fetching
   data      Bytes // resized WebP, ~20KB — small enough to live in Postgres
@@ -312,4 +324,5 @@ model ProductImage {
 
   @@unique([userId, sku])
   @@index([userId])
+  @@index([userId, skuKey])
 }

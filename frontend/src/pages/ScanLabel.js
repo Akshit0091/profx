@@ -188,8 +188,21 @@ export default function ScanLabel() {
       const form = new FormData();
       files.forEach((f) => form.append('files', f));
       const { data } = await api.post('/scan/labels', form);
+
+      // Sheets overlap, so "how many were actually new" is the number the
+      // seller wants — re-uploading yesterday's labels should visibly do nothing.
+      const parts = [`${data.added} new`];
+      if (data.duplicates) parts.push(`${data.duplicates} already stored`);
+      if (data.updated) parts.push(`${data.updated} corrected`);
+      if (data.purged) parts.push(`${data.purged} expired and removed`);
+
+      const what = (data.sources || []).includes('manifest')
+        ? ((data.sources || []).length > 1 ? 'sheet and manifest' : 'manifest')
+        : 'label sheet';
+
       setNotice(
-        `Indexed ${data.saved} labels across ${data.distinctSkus} products` +
+        `${parts.join(', ')}. ${data.scannable} parcels from this ${what} are scannable, ` +
+        `across ${data.distinctSkus} products` +
         (data.skusMissingImage
           ? ` — ${data.skusMissingImage} still have no photo, so run the extension on the Meesho orders page.`
           : ' — every one of them has a photo.')
@@ -218,6 +231,7 @@ export default function ScanLabel() {
           <p className="scan-stats">
             {stats.labels} labels indexed · {stats.images} products pictured
             {stats.skusMissingImage > 0 && ` · ${stats.skusMissingImage} without a photo`}
+            {stats.retentionDays && ` · kept for ${stats.retentionDays} days`}
           </p>
         )}
       </header>
@@ -291,10 +305,13 @@ export default function ScanLabel() {
         </form>
 
         <div className="scan-upload">
-          <label htmlFor="sheet">Label sheet</label>
+          <label htmlFor="sheet">Label sheet or manifest</label>
           <p className="hint">
-            Upload the <b>Sub Order Labels</b> PDF for a batch once, and every label in it
-            becomes scannable.
+            Upload either the <b>Sub Order Labels</b> PDF or the <b>Supplier Manifest</b> for
+            a batch — whichever you have. Both carry the same orders, and ProfX works out
+            which is which. Every parcel in it stays scannable for {stats?.retentionDays || 90} days,
+            and re-uploading an overlapping batch leaves what's already stored alone rather
+            than duplicating it.
           </p>
           <input id="sheet" type="file" accept="application/pdf" multiple onChange={uploadSheet} disabled={uploading} />
           {uploading && <p className="hint">Reading the sheet…</p>}
