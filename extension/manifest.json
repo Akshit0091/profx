@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "ProfX — Product Image Saver",
+  "description": "Saves Meesho product photos to ProfX, so scanning a shipping label shows the product.",
+  "version": "1.0.0",
+  "minimum_chrome_version": "102",
+  "permissions": ["storage"],
+  "host_permissions": ["https://supplier.meesho.com/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ProfX — Product Image Saver"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://supplier.meesho.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

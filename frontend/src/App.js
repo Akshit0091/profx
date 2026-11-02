@@ -29,6 +29,7 @@ import LabelDuplicateChecker from './pages/LabelDuplicateChecker';
 const LabelEditor = lazy(() => import('./pages/LabelEditor'));
 // Carries two long prompt templates, so it is split out too.
 const ProductImages = lazy(() => import('./pages/ProductImages'));
+const ScanLabel = lazy(() => import('./pages/ScanLabel'));
 
 function FullScreenLoader() {
   return (
@@ -102,6 +103,7 @@ export default function App() {
           <Route path="/app/image-tools" element={<ProtectedRoute><ImageTools /></ProtectedRoute>} />
           <Route path="/app/label-editor" element={<ProtectedRoute><Suspense fallback={<FullScreenLoader />}><LabelEditor /></Suspense></ProtectedRoute>} />
           <Route path="/app/product-images" element={<ProtectedRoute><Suspense fallback={<FullScreenLoader />}><ProductImages /></Suspense></ProtectedRoute>} />
+          <Route path="/app/scan" element={<ProtectedRoute><Suspense fallback={<FullScreenLoader />}><ScanLabel /></Suspense></ProtectedRoute>} />
           <Route path="/app/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
           <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />

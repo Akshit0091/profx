@@ -30,6 +30,7 @@ export default function Layout({ children }) {
     { to: '/app/orders',          label: 'Orders',         icon: '📋' },
     { to: '/app/sku',             label: 'SKU Pricing',    icon: '🏷️' },
     { to: '/app/supplier-orders', label: 'Supplier Orders', icon: '📦' },
+    { to: '/app/scan',            label: 'Scan Label',      icon: '📷' },
     { to: '/app/image-tools',     label: 'Image Tools',     icon: '🖼️' },
     { to: '/app/label-editor',    label: 'Label Editor',    icon: '🖨️' },
     { to: '/app/product-images',  label: 'Product Images',  icon: '✨' },
@@ -41,7 +42,7 @@ export default function Layout({ children }) {
     ? sellerNavAll
     : sellerNavAll.filter((i) => i.to !== '/app/image-tools' && i.to !== '/app/product-images');
   const sellerNav = isCombined
-    ? visibleNav.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders' || i.to === '/app/image-tools' || i.to === '/app/label-editor' || i.to === '/app/product-images')
+    ? visibleNav.filter((i) => i.to === '/app' || i.to === '/app/supplier-orders' || i.to === '/app/scan' || i.to === '/app/image-tools' || i.to === '/app/label-editor' || i.to === '/app/product-images')
     : visibleNav;
   const adminNav = [
     { to: '/admin', label: 'Admin Panel', icon: '⚙️' },

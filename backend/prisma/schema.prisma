@@ -9,69 +9,71 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  password     String
-  name         String?
-  phone        String?
-  isAdmin      Boolean       @default(false)
-  isActive     Boolean       @default(false)
-  createdAt    DateTime      @default(now())
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  phone     String?
+  isAdmin   Boolean  @default(false)
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
 
   // Which marketplaces this user has access to.
   // Values: "flipkart", "meesho", "amazon". Existing users backfill to ["flipkart"].
-  plans        String[]      @default([])
+  plans String[] @default([])
 
   // Amazon seller type: "easyship", "selfship", or "both". Null = not set yet.
   amazonSellerType String?
 
-  subscription Subscription?
-  skus         SKU[]
-  orders       Order[]
+  subscription      Subscription?
+  skus              SKU[]
+  orders            Order[]
   settlementEntries SettlementEntry[]
-  uploadLogs   UploadLog[]
-  shippingRates ShippingRate[]
-  supplierProducts SupplierProduct[]
-  skuMappings      SkuMapping[]
-  paymentRequests  PaymentRequest[]
-  printedLabels PrintedLabel[]
+  uploadLogs        UploadLog[]
+  shippingRates     ShippingRate[]
+  supplierProducts  SupplierProduct[]
+  skuMappings       SkuMapping[]
+  paymentRequests   PaymentRequest[]
+  printedLabels     PrintedLabel[]
+  scanLabels        ScanLabel[]
+  productImages     ProductImage[]
 }
 
 model Subscription {
-  id                     String   @id @default(cuid())
-  userId                 String   @unique
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   razorpaySubscriptionId String?
   razorpayCustomerId     String?
   razorpayPaymentId      String?
 
-  plan                   String   @default("starter")
-  amount                 Int      @default(59900)
-  status                 String   @default("pending") // pending | active | expired | cancelled
+  plan   String @default("starter")
+  amount Int    @default(59900)
+  status String @default("pending") // pending | active | expired | cancelled
 
-  currentPeriodStart     DateTime?
-  currentPeriodEnd       DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
 
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model SKU {
-  id            String   @id @default(cuid())
+  id            String @id @default(cuid())
   skuId         String
   purchasePrice Float
-  weight        Int?          // Weight in grams. Needed for Self Ship Amazon shipping cost calculation.
+  weight        Int? // Weight in grams. Needed for Self Ship Amazon shipping cost calculation.
 
   // Which marketplace this SKU price belongs to. Same physical product may be
   // listed at different prices per platform, so price is scoped per platform.
-  platform      String   @default("flipkart")
+  platform String @default("flipkart")
 
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // When the seller last marked "Rates Corrected" for this SKU on the marketplace.
   // Used to auto-badge loss orders: corrected (before this date) vs check-again (after).
@@ -82,53 +84,53 @@ model SKU {
 }
 
 model Order {
-  id             String    @id @default(cuid())
-  orderItemId    String
-  orderId        String?
-  skuId          String?
+  id          String  @id @default(cuid())
+  orderItemId String
+  orderId     String?
+  skuId       String?
 
   // Which marketplace this order is from. Default flipkart for existing data.
-  platform       String    @default("flipkart")
+  platform String @default("flipkart")
 
   dispatchDate   DateTime?
   bankSettlement Float?
   paymentDate    DateTime?
 
-  purchasePrice  Float?
-  profit         Float?
+  purchasePrice Float?
+  profit        Float?
 
-  hasPickup      Boolean   @default(false)
-  hasSettlement  Boolean   @default(false)
-  isMatched      Boolean   @default(false)
+  hasPickup     Boolean @default(false)
+  hasSettlement Boolean @default(false)
+  isMatched     Boolean @default(false)
 
-  trackingId     String?
+  trackingId String?
 
-  isReturned     Boolean   @default(false)
-  returnDate     DateTime?
+  isReturned Boolean   @default(false)
+  returnDate DateTime?
 
   // Distinguishes return sub-types. For Flipkart: null or "returned".
   // For Meesho: "rto" (never delivered, settlement 0) vs "return" (came back, reverse fee).
-  returnType            String?
+  returnType String?
 
   // Amazon fulfillment: "merchant" (Self Ship) or "amazon" (Easy Ship/FBA). Null for Flipkart/Meesho.
-  fulfillmentType       String?
+  fulfillmentType String?
   // Shipping cost for Self Ship orders (calculated from SKU weight + seller's rate card).
-  shippingCost          Float?
+  shippingCost    Float?
 
-  returnIncoming        Boolean   @default(false)
-  returnRequestedDate   DateTime?
-  returnReason          String?
-  returnSubReason       String?
-  returnStatus          String?
+  returnIncoming      Boolean   @default(false)
+  returnRequestedDate DateTime?
+  returnReason        String?
+  returnSubReason     String?
+  returnStatus        String?
 
-  isStarred             Boolean   @default(false)
-  starredAt             DateTime?
+  isStarred Boolean   @default(false)
+  starredAt DateTime?
 
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([orderItemId, userId, platform])
   @@index([userId, platform])
@@ -145,22 +147,22 @@ model Order {
 // so re-uploads are idempotent.  Different files contribute their own entries
 // independently, and the sum naturally reflects all of them.
 model SettlementEntry {
-  id             String    @id @default(cuid())
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  platform       String    @default("flipkart")
+  platform String @default("flipkart")
 
   orderItemId    String
   orderId        String?
   paymentDate    DateTime?
   bankSettlement Float
 
-  fileHash       String
-  fileName       String?
-  rowIndex       Int       // position within the file, for re-upload stability
+  fileHash String
+  fileName String?
+  rowIndex Int // position within the file, for re-upload stability
 
-  createdAt      DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, platform, orderItemId])
   @@index([userId, fileHash])
@@ -188,43 +190,43 @@ model ShippingRate {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  minWeight Int      // grams
-  maxWeight Int      // grams
-  cost      Float    // ₹ per shipment
+  minWeight Int // grams
+  maxWeight Int // grams
+  cost      Float // ₹ per shipment
   createdAt DateTime @default(now())
 
   @@index([userId])
 }
 
 model SupplierProduct {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   publisher String?
   title     String
-  className String?   // shown as "Class" in the supplier sheet
+  className String? // shown as "Class" in the supplier sheet
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  mappings  SkuMapping[]
+  mappings SkuMapping[]
 
   @@index([userId])
 }
 
 model SkuMapping {
-  id                String          @id @default(cuid())
-  userId            String
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   sku               String
   supplierProductId String
   supplierProduct   SupplierProduct @relation(fields: [supplierProductId], references: [id], onDelete: Cascade)
 
-  qtyPerUnit        Int             @default(1)  // copies of this book per 1 order of the SKU
+  qtyPerUnit Int @default(1) // copies of this book per 1 order of the SKU
 
-  createdAt         DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, sku])
 }
@@ -243,19 +245,71 @@ model PaymentRequest {
   reviewedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
   @@index([userId])
   @@index([status])
 }
 
-
 model PrintedLabel {
   id        String   @id @default(cuid())
   userId    String
-  orderId   String   // e.g. "316218282222232320_1" — the Meesho "Order No." incl. suffix
+  orderId   String // e.g. "316218282222232320_1" — the Meesho "Order No." incl. suffix
   printedAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, orderId]) // same seller can't have the same order printed "fresh" twice
+  @@index([userId])
+}
+
+// One row per label the seller has printed, built from the label-sheet PDF and
+// topped up by the browser extension. This is what a barcode scan resolves
+// against: whichever of the three keys the label's barcode happens to carry,
+// it lands on the same row and so on the same product.
+model ScanLabel {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subOrderId String // "347365437691724416_1" — Meesho's Order No. incl. suffix
+  orderNo    String // the same without the "_1", since some barcodes drop it
+  awb        String? // courier tracking no. Formats differ per courier, and the
+  // extension can't see it, so it stays null until the PDF lands.
+  courier    String?
+
+  sku   String
+  title String? // product name as the orders page shows it
+  qty   Int     @default(1)
+  size  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, subOrderId])
+  @@index([userId, awb])
+  @@index([userId, orderNo])
+  @@index([userId, sku])
+}
+
+// The product picture, stored once per SKU rather than per order: the same book
+// ships hundreds of times, and a label printed today still has to resolve weeks
+// later when that order is long gone from the Meesho panel.
+model ProductImage {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sku       String
+  title     String?
+  sourceUrl String? // the Meesho CDN URL it was fetched from, for re-fetching
+  data      Bytes // resized WebP, ~20KB — small enough to live in Postgres
+  mimeType  String  @default("image/webp")
+  width     Int?
+  height    Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, sku])
   @@index([userId])
 }

@@ -1,0 +1,56 @@
+/* The panel sits over Meesho's own UI, so every value here is deliberate and
+   namespaced — the page's stylesheet must not be able to reach it, and it must
+   not cover the table's own controls. */
+
+.profx-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2147483000;
+  width: 260px;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid #e2e4ea;
+  border-left: 4px solid #4f46e5;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(16, 20, 38, 0.18);
+  font: 400 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #1f2330;
+}
+
+.profx-panel.profx-done   { border-left-color: #16a34a; }
+.profx-panel.profx-error  { border-left-color: #dc2626; }
+
+.profx-title {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4f46e5;
+  margin-bottom: 6px;
+}
+
+.profx-status {
+  margin-bottom: 10px;
+  min-height: 34px;
+  color: #4a5063;
+  overflow-wrap: anywhere;
+}
+
+.profx-panel.profx-error .profx-status { color: #b91c1c; }
+.profx-panel.profx-done  .profx-status { color: #15803d; }
+
+.profx-go {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: #4f46e5;
+  color: #fff;
+  font: 600 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.profx-go:hover:not(:disabled) { background: #4338ca; }
+.profx-go:disabled { background: #a5a9bd; cursor: progress; }

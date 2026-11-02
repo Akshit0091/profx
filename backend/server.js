@@ -16,6 +16,7 @@ const oauthRoutes     = require('./routes/oauth');
 const supplierOrdersRoutes = require('./routes/supplierOrders');
 const imageToolsRoutes = require('./routes/imageTools');
 const imageGenRoutes  = require('./routes/imageGen');
+const scanRoutes      = require('./routes/scan');
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use('/api/orders',    ordersRoutes);
 app.use('/api/supplier-orders', supplierOrdersRoutes);
 app.use('/api/image-tools', imageToolsRoutes);
 app.use('/api/image-gen',   imageGenRoutes);
+app.use('/api/scan',        scanRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reset',     resetRoutes);
 app.use('/api/contact',   contactRoutes);
