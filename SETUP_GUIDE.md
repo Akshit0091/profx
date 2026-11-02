@@ -19,7 +19,7 @@ profx/
 ## 🧰 Prerequisites
 
 - **Node.js 18+** and npm
-- **PostgreSQL 14+** (local or hosted — Railway works great)
+- **PostgreSQL 14+** (local, or hosted — production runs on [Neon](https://neon.tech))
 - A **Razorpay** account (test mode is fine for development)
 - A **Resend** account for transactional emails (optional but recommended)
 
@@ -158,15 +158,15 @@ The app will open at **http://localhost:3000**.
 
 ## 4️⃣ Production Deployment
 
-### Backend → Railway
+### Backend → Render
+
+Production runs at **`https://profx-api.onrender.com`**, with the database on
+**Neon** rather than a plugin of the host's.
 
 1. Push the repo to GitHub
-2. Go to [https://railway.app](https://railway.app) → **New Project → Deploy from GitHub**
+2. Go to [https://render.com](https://render.com) → **New → Web Service → Build and deploy from a Git repository**
 3. Select the repo, set the **root directory** to `backend/`
-4. Add a **PostgreSQL** plugin to the project — Railway auto-injects `DATABASE_URL`
-5. In the service **Variables** tab, add every env var from the local `.env` **except** `DATABASE_URL` (it's already injected)
-6. Set `NODE_ENV=production` and `FRONTEND_URL=https://<your-vercel-domain>`
-7. Railway runs `npm install`, then `npm run build`, then `npm start` — these are defined in `package.json`:
+4. Build command `npm install && npm run build`, start command `npm start` — both defined in `package.json`:
    - `build`: `npx prisma generate && npx prisma db push`
    - `start`: `node server.js`
 
@@ -175,10 +175,22 @@ The app will open at **http://localhost:3000**.
    > would be applied silently against production. Without it, that deploy fails instead
    > and you decide what to do. A change that loses no data still applies on its own, so
    > ordinary deploys are unaffected.
-8. The service listens on `process.env.PORT` (Railway sets this automatically) and binds to `0.0.0.0` — no manual config needed
-9. Once deployed, copy the Railway public URL (e.g. `https://profx-api.up.railway.app`) — you'll plug it into Vercel next
+5. Create a Postgres database at [Neon](https://neon.tech) and copy its pooled connection
+   string — it already ends in `?sslmode=require`
+6. In **Environment**, add every variable from the local `.env`, including `DATABASE_URL`
+   (nothing is injected for you), plus `NODE_ENV=production` and
+   `FRONTEND_URL=https://www.profx.website`
+7. The service listens on `process.env.PORT`, which Render sets, and binds to `0.0.0.0` — no manual config needed
+8. Check it is up: `curl https://profx-api.onrender.com/api/health` should return
+   `{"status":"ok","app":"ProfX","version":"2.0"}`
 
-> **Do not** add a `nixpacks.toml` — Railway's default Node builder works perfectly with the `build` and `start` scripts in `package.json`.
+> `schema.prisma` lists `debian-openssl-3.0.x` under `binaryTargets` for Render's
+> build image, alongside `linux-musl-openssl-3.0.x`. Removing either will produce
+> a "query engine binary not found" error at runtime rather than at build time.
+
+> **Adding a required column?** `prisma db push` cannot add a `NOT NULL` column to a
+> table that already has rows, and the deploy will fail. Add it as nullable, backfill
+> it, then set `NOT NULL` — directly against the database, before you deploy.
 
 ### Frontend → Vercel
 
@@ -188,19 +200,20 @@ The app will open at **http://localhost:3000**.
 4. **Environment Variables:**
 
    ```
-   REACT_APP_API_URL=https://<your-railway-domain>/api
+   REACT_APP_API_URL=https://profx-api.onrender.com/api
    REACT_APP_RAZORPAY_KEY_ID=rzp_live_xxxxxxxxxx
    ```
 
-5. Deploy. Vercel gives you a URL like `https://profx.vercel.app`
-6. Go back to Railway and update `FRONTEND_URL` to that Vercel URL
+5. Deploy. Vercel gives you a URL like `https://profx.vercel.app`; production is served
+   at the custom domain **`https://www.profx.website`** (the apex redirects to `www`)
+6. Go back to Render and set `FRONTEND_URL` to that same URL
 
 ### Update Razorpay webhook URL
 
-After Railway gives you the production URL, go back to the Razorpay dashboard and update the webhook URL to:
+Point the Razorpay dashboard's webhook at the live backend:
 
 ```
-https://<your-railway-domain>/api/payment/webhook
+https://profx-api.onrender.com/api/payment/webhook
 ```
 
 ---
@@ -289,22 +302,23 @@ See `sample-return-report.csv` in the repo root for a working example.
 
 ## 8️⃣ Troubleshooting
 
-**Prisma can't connect / SSL errors on Railway**
-Append `?sslmode=require` to your `DATABASE_URL` if Railway requires it.
+**Prisma can't connect / SSL errors**
+Neon requires `?sslmode=require` on the `DATABASE_URL`; its pooled connection string
+already includes it. Keep the **pooled** string, not the direct one.
 
 **Razorpay checkout doesn't open**
 Make sure `<script src="https://checkout.razorpay.com/v1/checkout.js"></script>` is the last tag inside `<body>` in `frontend/public/index.html`. Verify `REACT_APP_RAZORPAY_KEY_ID` is set.
 
 **Welcome / receipt emails aren't sending**
-Confirm the Resend domain is verified and `RESEND_API_KEY` + `FROM_EMAIL` are set on Railway. Check Railway logs for "Resend error" lines. If `RESEND_API_KEY` is missing, emails are silently skipped — this is intentional.
+Confirm the Resend domain is verified and `RESEND_API_KEY` + `FROM_EMAIL` are set on Render. Check the Render logs for "Resend error" lines. If `RESEND_API_KEY` is missing, emails are silently skipped — this is intentional.
 
 **"Payment required" loop in the frontend**
 Either the seller's subscription has expired (check `/admin`) or `isActive` is `false`. As admin, activate the seller manually for the desired duration.
 
 **Frontend can't reach the API in production**
-Confirm `REACT_APP_API_URL` on Vercel points to the Railway URL **including `/api`** at the end. Check CORS — `server.js` already allows all origins by default; restrict in production if needed.
+Confirm `REACT_APP_API_URL` on Vercel points to `https://profx-api.onrender.com/api`, **including `/api`** at the end. Check CORS — `server.js` already allows all origins by default; restrict in production if needed.
 
-**Prisma engine errors on Railway ("binary not found")**
+**Prisma engine errors on Render ("binary not found")**
 The schema already includes the required `binaryTargets`: `["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]`. If you change the schema, regenerate with `npx prisma generate`.
 
 ---
