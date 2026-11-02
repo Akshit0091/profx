@@ -23,6 +23,9 @@
   const STABLE_ROUNDS_PATIENT = 10; // ...but far more while the tab says there are more to come
   const MAX_SCROLLS = 800;    // smaller steps means more of them
   const MAX_PAGES = 60;
+  // Shown in the panel. Without it there is no way to tell, from a screenshot
+  // of a run, whether the extension was reloaded after a change.
+  const VERSION = '2026-11-02b';
   const STEP = 0.5;           // of a screen per scroll step, so every row is on screen a while
   const PASSES = 3;           // trips down the list; a later one picks up what an earlier missed
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
@@ -262,6 +265,13 @@
     const target = expectedCount();
     const stopWatching = watch(found);
 
+    /** How many rows are in the page at this moment. */
+    const rowCount = () => {
+      const t = currentTable();
+      const body = t && (t.querySelector('tbody') || t);
+      return body ? body.querySelectorAll('tr').length : 0;
+    };
+
     /**
      * How tall the rows currently in the page are, or 0 where that cannot be
      * measured.
@@ -288,8 +298,14 @@
      * rendered into, and watching for changes cannot recover a row that was
      * never there. That is what left three rows in four.
      */
+    // What the walk did, reported when it comes up short. A shortfall has
+    // several possible causes that look identical from the outside, and these
+    // are the numbers that tell them apart.
+    const seen = { steps: 0, boxH: 0, bandH: 0, mostRows: 0, passes: 0 };
+
     const stepScroll = () => {
       const rendered = renderedHeight();
+      if (rendered > seen.bandH) seen.bandH = Math.round(rendered);
       for (const b of boxes) {
         const before = b.scrollTop;
         const byBox = Math.floor((b.clientHeight || 600) * STEP);
@@ -297,8 +313,9 @@
           100,
           rendered > 0 ? Math.min(byBox, Math.floor(rendered * STEP)) : byBox
         );
+        if (!seen.boxH) seen.boxH = Math.round(b.clientHeight || 0);
         b.scrollTop = Math.min(b.scrollTop + step, b.scrollHeight);
-        if (b.scrollTop > before + 2) return true;
+        if (b.scrollTop > before + 2) { seen.steps += 1; return true; }
       }
       return false;
     };
@@ -328,6 +345,7 @@
         // only going to be seen on another trip past it, and a second walk of
         // a list that is already loaded costs seconds.
         for (let pass = 0; pass < PASSES; pass += 1) {
+          seen.passes = pass + 1;
           const atStart = found.size;
           await toTop();
           let stable = 0;
@@ -336,6 +354,8 @@
             if (Date.now() > deadline) { ranOut = true; break; }
 
             const added = harvest(currentTable() || table, found);
+            const onScreen = rowCount();
+            if (onScreen > seen.mostRows) seen.mostRows = onScreen;
             progress();
 
             // Everything the tab promised is in hand, so there is nothing to be
@@ -384,7 +404,17 @@
 
     harvest(currentTable() || table, found);
     const items = [...found.values()];
-    return { items, photoless: items.filter((i) => !i.imageUrl).length, ranOut, target };
+    const diag =
+      `v${VERSION} · ${seen.passes} pass(es), ${seen.steps} steps, ` +
+      `box ${seen.boxH}px, rows band ${seen.bandH}px, most rows at once ${seen.mostRows}`;
+
+    return {
+      items,
+      photoless: items.filter((i) => !i.imageUrl).length,
+      ranOut,
+      target,
+      diag,
+    };
   }
 
   // ---------- sending ----------
@@ -405,7 +435,7 @@
    * nothing reaches the server and nothing is stored.
    */
   async function preview(report) {
-    const { items, photoless, ranOut, target } = await collectAll(report);
+    const { items, photoless, ranOut, target, diag } = await collectAll(report);
     if (!items.length) {
       throw new Error(`Found no orders with a product photo. (What is here — ${describePage()})`);
     }
@@ -415,6 +445,7 @@
     return {
       scanned: items.length,
       photoless,
+      diag,
       withSku,
       ranOut,
       target,
@@ -426,7 +457,7 @@
     const status = await send('status');
     if (!status.signedIn) throw new Error('Sign in from the ProfX extension popup first.');
 
-    const { items, photoless, ranOut, target } = await collectAll(report);
+    const { items, photoless, ranOut, target, diag } = await collectAll(report);
     if (!items.length) {
       throw new Error(`Found no orders with a product photo. (What is here — ${describePage()})`);
     }
@@ -444,7 +475,7 @@
       totals.imagesSkipped += res.imagesSkipped || 0;
       totals.unresolved += res.unresolved || 0;
     }
-    return { ...totals, scanned: items.length, photoless, ranOut };
+    return { ...totals, scanned: items.length, photoless, ranOut, diag };
   }
 
   // ---------- the on-page panel ----------
@@ -452,11 +483,12 @@
   const panel = document.createElement('div');
   panel.className = 'profx-panel';
   panel.innerHTML = `
-    <div class="profx-title">ProfX</div>
+    <div class="profx-title">ProfX <span class="profx-ver"></span></div>
     <div class="profx-status">Ready</div>
     <button class="profx-check" type="button">Preview — read, send nothing</button>
     <button class="profx-go" type="button">Save product images</button>
   `;
+  panel.querySelector('.profx-ver').textContent = VERSION;
   const statusEl = panel.querySelector('.profx-status');
   const button = panel.querySelector('.profx-go');
   const checkButton = panel.querySelector('.profx-check');
@@ -468,7 +500,10 @@
   // rather than leaving a quiet shortfall to be noticed later.
   const shortfall = (r) =>
     (r.target && r.scanned < r.target
-      ? ` ${r.target - r.scanned} of the ${r.target} on this tab were not reached — scroll to the bottom yourself and run it again.`
+      ? ` ${r.target - r.scanned} of the ${r.target} on this tab are not in the list.` +
+        ' Check the filters above the list: with one set, the tab still counts every order' +
+        ' while the list shows only some.' +
+        (r.diag ? ` [${r.diag}]` : '')
       : '');
 
   /** Both buttons behave the same way; only the work in between differs. */

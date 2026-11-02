@@ -31,6 +31,15 @@
   margin-bottom: 6px;
 }
 
+/* Build marker. Small and grey: it is only there to show which copy of the
+   extension is running, so a stale one is obvious from a screenshot. */
+.profx-ver {
+  font-weight: 500;
+  font-size: 10px;
+  opacity: 0.55;
+  letter-spacing: 0.02em;
+}
+
 .profx-status {
   margin-bottom: 10px;
   min-height: 34px;
