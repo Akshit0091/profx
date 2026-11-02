@@ -1,0 +1,102 @@
+/* Phone layout.
+ *
+ * Every rule here is inside the phone breakpoint, so the laptop and desktop
+ * layout is left exactly as it was. Loaded last, after the page stylesheets,
+ * so these can correct them without having to out-specify anything.
+ */
+
+@media (max-width: 768px) {
+  /* ── Nothing may push the page sideways ──────────────────────────────
+     One over-wide element makes the whole page pan left and right, which
+     reads as the site being broken rather than as that one element being
+     wide. Everything that can overflow is capped at the screen instead. */
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  img,
+  video,
+  canvas,
+  svg,
+  iframe,
+  pre {
+    max-width: 100%;
+    height: auto;
+  }
+
+  pre {
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* A long unbroken string — an order ID, an AWB, a URL — is as wide as it is
+     long, and no layout survives that. */
+  td,
+  th,
+  p,
+  li,
+  dd {
+    overflow-wrap: anywhere;
+  }
+
+  /* ── Wide tables scroll themselves ───────────────────────────────────
+     Orders and the admin panel already sit in a scrolling wrapper. These two
+     do not, so they get to scroll on their own rather than stretching the
+     page. */
+  .sku-table,
+  .rate-table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Fields ──────────────────────────────────────────────────────────
+     iOS zooms the whole page in when a focused field is under 16px, and does
+     not zoom back out. Everything typed into is held at 16px for that reason
+     alone; it is not a design choice. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+    max-width: 100%;
+  }
+
+  /* ── Thumbs, not pointers ────────────────────────────────────────────
+     44px is the smallest target a thumb hits reliably. */
+  button,
+  .btn,
+  a.btn,
+  [role='button'] {
+    min-height: 44px;
+  }
+
+  /* ── Clear of the tab bar ────────────────────────────────────────────
+     Anything pinned to the bottom of the screen would otherwise sit under the
+     bar, or hide it. */
+  .pwa-ip {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* The narrowest phones in common use are 360–375px wide. Below 420px the
+   generous desktop padding costs more than it earns. */
+@media (max-width: 420px) {
+  .card,
+  .panel,
+  .table-card {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  h1 { font-size: 22px; }
+  h2 { font-size: 19px; }
+  h3 { font-size: 17px; }
+}

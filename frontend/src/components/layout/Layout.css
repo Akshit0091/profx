@@ -169,17 +169,43 @@
   font-size: 18px;
 }
 
+/* Dimmed sheet behind the drawer. Never shown above the phone breakpoint. */
+.sidebar-backdrop { display: none; }
+
 @media (max-width: 768px) {
-  .main-inner { padding: 18px; }
-  .mobile-toggle { display: block; }
+  /* The last of the page has to clear the tab bar, or it sits under it. */
+  .main-inner {
+    padding: 16px 16px calc(74px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The More tab opens the drawer now, so the floating hamburger goes. */
+  .mobile-toggle { display: none; }
+
   .sidebar {
     position: fixed;
     z-index: 49;
     transform: translateX(-100%);
     transition: transform 0.2s;
     box-shadow: var(--shadow-lg);
+    /* Sign Out sits at the bottom of the drawer, where the bar would cover it. */
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
   .layout.mobile-open .sidebar { transform: translateX(0); }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 48;              /* under the drawer, over the page */
+    background: rgba(15, 23, 42, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .layout.mobile-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /* ───── Platform switcher ───── */

@@ -1,0 +1,86 @@
+/* The phone tab bar. Everything here is inside the phone breakpoint, so the
+   desktop layout is untouched — above 768px the bar does not exist at all. */
+
+.tabbar { display: none; }
+
+@media (max-width: 768px) {
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;            /* over the drawer, so More can close it again */
+    display: flex;
+    align-items: stretch;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    /* Clears the home indicator on an iPhone, and nothing on Android. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    box-shadow: 0 -2px 12px rgba(15, 23, 42, 0.06);
+  }
+
+  .tabbar-item {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    /* 56px of target before the safe-area padding: comfortably past the 44px
+       a thumb needs. */
+    min-height: 56px;
+    padding: 8px 2px;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-muted);
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tabbar-item:active { background: rgba(37, 99, 235, 0.06); }
+
+  .tabbar-icon {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .tabbar-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The marker sits on the top edge of the active tab. */
+  .tabbar-item.is-active {
+    color: var(--primary);
+  }
+  .tabbar-item.is-active::before {
+    content: '';
+    position: absolute;
+    top: -1px;              /* over the bar's own border */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--primary);
+  }
+}
+
+/* A phone in landscape is short enough that a fixed bar eats the page. Keep it,
+   but take back the vertical space. */
+@media (max-width: 768px) and (max-height: 460px) {
+  .tabbar-item {
+    min-height: 44px;
+    padding: 5px 2px;
+  }
+  .tabbar-label { font-size: 10px; }
+}

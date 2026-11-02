@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../utils/AuthContext';
 import Logo from '../Logo';
+import TabBar from './TabBar';
 import { useActivePlatform, ownsAllPlatforms, PLATFORM_META, ALL_PLATFORM, ALL_META } from '../../utils/platforms';
 import './Layout.css';
 
@@ -151,7 +152,13 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      <button className="mobile-toggle" onClick={() => setMobileOpen((v) => !v)}>☰</button>
+      {/* Without something to tap away on, the drawer can only be closed from
+          the More tab, which is easy to miss. Phone only. */}
+      <div
+        className={`sidebar-backdrop ${mobileOpen ? 'is-open' : ''}`}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden="true"
+      />
 
       <main className="main">
         {daysLeft !== null && daysLeft >= 0 && daysLeft <= 7 && !user?.isAdmin && (
@@ -161,6 +168,8 @@ export default function Layout({ children }) {
         )}
         <div className="main-inner">{children}</div>
       </main>
+
+      <TabBar onMore={() => setMobileOpen((v) => !v)} moreOpen={mobileOpen} />
     </div>
   );
 }
