@@ -14,9 +14,10 @@ you already download, uploaded once on the **Scan Label** page in ProfX.
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick this `extension` folder.
 4. Click the ProfX icon in the toolbar and sign in:
-   - **ProfX address** — your API, ending in `/api`
-     (`http://localhost:5000/api` while developing, otherwise your live API URL).
-   - The same email and password you use on the ProfX website.
+   - **ProfX address** — `https://profx-api.onrender.com/api`
+     (the live API; use `http://localhost:5000/api` only when running the
+     backend on your own machine, and it has to actually be running).
+   - The same email and password you use on profx.website.
 
 Chrome will ask for permission to reach that address. It is asked for at sign-in
 rather than at install so the install prompt only ever mentions Meesho.
@@ -25,7 +26,14 @@ rather than at install so the install prompt only ever mentions Meesho.
 
 1. Open the Meesho supplier panel → **Orders → Ready to Ship**.
 2. A small ProfX panel appears at the bottom-right of the page.
-3. Press **Save product images**.
+3. Press **Preview — read, send nothing** first. It walks the whole list and
+   reports what it found without contacting the server at all, and prints every
+   row it read to the browser console (F12 → Console). If the count looks right,
+   the scraper understands the page.
+4. Then press **Save product images**.
+
+Previewing first is worth the extra click the first time, and after any Meesho
+redesign: nothing is written until you have seen that the numbers are sane.
 
 It scrolls the list to the end, collects every order with a photo, and sends
 them to ProfX in batches. Photos are fetched and resized server-side, one per
@@ -52,7 +60,12 @@ as the row's first real image. Moving or renaming a column is handled.
 
 What would break it is Meesho dropping the HTML table altogether. If the panel
 reports *"No orders table on this page"* while you are on Ready to Ship, that is
-what has happened, and `content.js` needs its row-finding updated.
+what has happened, and `content.js` needs its row-finding updated. The message
+carries a count of the tables, grids, images and sub-order IDs it could see —
+send that line along and it says what the page turned into.
+
+A run stops after 10 minutes whatever happens, and says so. Press the button
+again to carry on from where it left off; orders already saved are skipped.
 
 ## Files
 

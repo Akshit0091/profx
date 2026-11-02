@@ -41,7 +41,8 @@
 .profx-panel.profx-error .profx-status { color: #b91c1c; }
 .profx-panel.profx-done  .profx-status { color: #15803d; }
 
-.profx-go {
+.profx-go,
+.profx-check {
   width: 100%;
   padding: 9px 12px;
   border: 0;
@@ -53,4 +54,15 @@
 }
 
 .profx-go:hover:not(:disabled) { background: #4338ca; }
-.profx-go:disabled { background: #a5a9bd; cursor: progress; }
+.profx-go:disabled,
+.profx-check:disabled { background: #a5a9bd; cursor: progress; }
+
+/* Preview comes first and reads as the safer of the two, because it is the
+   one to try before letting the scraper write anything. */
+.profx-check {
+  margin-bottom: 7px;
+  background: #eef0f6;
+  color: #3a3f52;
+}
+
+.profx-check:hover:not(:disabled) { background: #e3e6ef; }
