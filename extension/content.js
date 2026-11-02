@@ -23,6 +23,8 @@
   const STABLE_ROUNDS_PATIENT = 10; // ...but far more while the tab says there are more to come
   const MAX_SCROLLS = 800;    // smaller steps means more of them
   const MAX_PAGES = 60;
+  const STEP = 0.5;           // of a screen per scroll step, so every row is on screen a while
+  const PASSES = 3;           // trips down the list; a later one picks up what an earlier missed
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -36,6 +38,18 @@
       if (/sub[-\s]?order/i.test(table.textContent || '')) return table;
     }
     return null;
+  }
+
+  /**
+   * The orders table, remembered between calls. The page re-renders constantly
+   * and this is looked up on every change, so searching every table each time
+   * would be wasteful.
+   */
+  let tableCache = null;
+  function currentTable() {
+    if (tableCache && tableCache.isConnected) return tableCache;
+    tableCache = findTable();
+    return tableCache;
   }
 
   /** Maps column meaning to index, read from the table's own header row. */
@@ -67,7 +81,8 @@
         .map((s) => norm(s).split(' ')[0])
         .filter((u) => /^https?:/i.test(u))
         .pop();
-      const src = fromSet || img.currentSrc || img.src;
+      const src = fromSet || img.currentSrc || img.src ||
+        img.getAttribute('data-src') || img.getAttribute('data-original');
       if (!src || !/^https?:/i.test(src)) continue;
       if (/\.svg(\?|$)/i.test(src)) continue;
       return src;
@@ -84,8 +99,10 @@
                         rowText.match(SUB_ORDER_RE) || [])[1];
     if (!subOrderId) return null;
 
+    // A row whose photo has not arrived yet is still worth keeping. Dropping it
+    // loses the row for good, because the list will have moved on by the time
+    // the photo appears; held instead, the next sighting fills it in.
     const imageUrl = rowImage(row);
-    if (!imageUrl) return null;
 
     // The product cell holds the title plus an "Order ID: ..." line underneath;
     // only the title is wanted.
@@ -135,18 +152,54 @@
     return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
   }
 
+  /**
+   * Folds a row into what has been collected so far.
+   *
+   * The same row goes past several times, and an early sighting can be missing
+   * the photo, so a later one fills the gaps instead of being thrown away.
+   */
+  function merge(into, item) {
+    const prev = into.get(item.subOrderId);
+    if (!prev) { into.set(item.subOrderId, item); return 1; }
+    if (!prev.imageUrl && item.imageUrl) prev.imageUrl = item.imageUrl;
+    if (!prev.sku && item.sku) prev.sku = item.sku;
+    if (!prev.title && item.title) prev.title = item.title;
+    return 0;
+  }
+
   function harvest(table, into) {
+    if (!table) return 0;
     const idx = headerIndex(table);
     const body = table.querySelector('tbody') || table;
     let added = 0;
     for (const row of body.querySelectorAll('tr')) {
       const item = readRow(row, idx);
-      if (item && !into.has(item.subOrderId)) {
-        into.set(item.subOrderId, item);
-        added += 1;
-      }
+      if (item) added += merge(into, item);
     }
     return added;
+  }
+
+  /**
+   * Reads every row the moment it appears, for as long as the walk lasts.
+   *
+   * Scroll-then-look is a race. The list keeps only the rows near the scroll
+   * position, so one that is rendered and removed again between two looks is
+   * never seen at all — which is how a list that was being scrolled through
+   * perfectly well still came back three rows in four. Reading on change
+   * instead means the timing of the scroll no longer has to be right.
+   */
+  function watch(found) {
+    if (typeof MutationObserver !== 'function') return () => {};
+    let queued = false;
+    const read = () => { queued = false; harvest(currentTable(), found); };
+    const observer = new MutationObserver(() => {
+      if (queued) return;        // one read per tick, however many changes land
+      queued = true;
+      setTimeout(read, 0);
+    });
+    const root = document.body || document.documentElement;
+    if (root) observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }
 
   /** Clicks through to the next page, if the list is paginated. Returns success. */
@@ -207,21 +260,61 @@
     const boxes = scrollers(table);
     const box = boxes[0];
     const target = expectedCount();
+    const stopWatching = watch(found);
+
+    /**
+     * How tall the rows currently in the page are, or 0 where that cannot be
+     * measured.
+     */
+    const renderedHeight = () => {
+      const t = currentTable();
+      const body = t && (t.querySelector('tbody') || t);
+      const list = body ? body.querySelectorAll('tr') : [];
+      if (!list.length || typeof list[0].getBoundingClientRect !== 'function') return 0;
+      const first = list[0].getBoundingClientRect();
+      const last = list[list.length - 1].getBoundingClientRect();
+      return Math.max(0, last.bottom - first.top);
+    };
 
     /**
      * Advances the innermost box that still has somewhere to go, falling
      * through to the page once the grid is at its end. Returns false only when
      * nothing on the page can scroll any further.
+     *
+     * The step is measured against the rows that are in the page rather than
+     * against the box, because the box can be a good deal taller than the band
+     * of rows rendered inside it — it scrolls the filters and tabs too. A step
+     * measured against the box then clears a stretch that no row was ever
+     * rendered into, and watching for changes cannot recover a row that was
+     * never there. That is what left three rows in four.
      */
     const stepScroll = () => {
+      const rendered = renderedHeight();
       for (const b of boxes) {
         const before = b.scrollTop;
-        const step = Math.max(200, Math.floor((b.clientHeight || 600) * 0.8));
+        const byBox = Math.floor((b.clientHeight || 600) * STEP);
+        const step = Math.max(
+          100,
+          rendered > 0 ? Math.min(byBox, Math.floor(rendered * STEP)) : byBox
+        );
         b.scrollTop = Math.min(b.scrollTop + step, b.scrollHeight);
         if (b.scrollTop > before + 2) return true;
       }
       return false;
     };
+
+    /**
+     * Back to the top before each walk. The seller may well have scrolled the
+     * list themselves before pressing the button, and the walk only ever goes
+     * downwards, so everything above where they left it would be missed.
+     */
+    const toTop = async () => {
+      for (const b of boxes) b.scrollTop = 0;
+      await sleep(SETTLE_MS);
+    };
+
+    const progress = () =>
+      report(`Reading the list… ${found.size}${target ? ` of ${target}` : ''} orders`);
 
     // Without a ceiling the scroll and page limits multiply out to hours. A
     // run over a few thousand orders finishes in minutes, so anything past
@@ -229,50 +322,69 @@
     const deadline = Date.now() + BUDGET_MS;
     let ranOut = false;
 
-    for (let page = 0; page < MAX_PAGES; page += 1) {
-      let stable = 0;
-      for (let i = 0; i < MAX_SCROLLS; i += 1) {
-        if (Date.now() > deadline) { ranOut = true; break; }
+    try {
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        // Walk the whole list more than once. A row missed on the way down is
+        // only going to be seen on another trip past it, and a second walk of
+        // a list that is already loaded costs seconds.
+        for (let pass = 0; pass < PASSES; pass += 1) {
+          const atStart = found.size;
+          await toTop();
+          let stable = 0;
 
-        const added = harvest(findTable() || table, found);
-        report(`Reading the list… ${found.size}${target ? ` of ${target}` : ''} orders`);
+          for (let i = 0; i < MAX_SCROLLS; i += 1) {
+            if (Date.now() > deadline) { ranOut = true; break; }
 
-        // Everything the tab promised is in hand, so there is nothing to be
-        // gained by scrolling on and waiting out the quiet rounds.
-        if (target && found.size >= target) break;
+            const added = harvest(currentTable() || table, found);
+            progress();
 
-        // Step down roughly one screen at a time rather than jumping to the
-        // bottom. The list only keeps the visible rows in the page, so a jump
-        // skips everything in between.
-        const moved = stepScroll();
+            // Everything the tab promised is in hand, so there is nothing to be
+            // gained by scrolling on and waiting out the quiet rounds.
+            if (target && found.size >= target) break;
 
-        // Nothing left to scroll usually means more is being fetched, so wait
-        // longer there than between ordinary steps.
-        await sleep(moved ? SETTLE_MS : BOTTOM_WAIT_MS);
+            // Step well under a screen at a time rather than jumping to the
+            // bottom. The list only keeps the rows near the scroll position in
+            // the page, so a jump skips everything in between.
+            const moved = stepScroll();
 
-        if (added === 0 && !moved) stable += 1;
-        else stable = 0;
+            // Nothing left to scroll usually means more is being fetched, so
+            // wait longer there than between ordinary steps.
+            await sleep(moved ? SETTLE_MS : BOTTOM_WAIT_MS);
 
-        // While the tab says there are more than we have, give the page far
-        // longer to produce them before concluding the list has ended.
-        const shortOfTarget = target && found.size < target;
-        if (stable >= (shortOfTarget ? STABLE_ROUNDS_PATIENT : STABLE_ROUNDS)) break;
+            if (added === 0 && !moved) stable += 1;
+            else stable = 0;
+
+            // While the tab says there are more than we have, give the page far
+            // longer to produce them before concluding the list has ended.
+            const shortOfTarget = target && found.size < target;
+            if (stable >= (shortOfTarget ? STABLE_ROUNDS_PATIENT : STABLE_ROUNDS)) break;
+          }
+
+          harvest(currentTable() || table, found);
+          progress();
+
+          // Another trip down would only repeat this one: either the list is
+          // complete, or a whole walk turned up nothing new.
+          if (ranOut || found.size === atStart || (target && found.size >= target)) break;
+        }
+        if (ranOut) break;
+
+        const before = found.size;
+        if (!(await nextPage(table, box))) break;
+        box.scrollTop = 0;
+        harvest(currentTable() || table, found);
+
+        // The control we clicked was not pagination after all, or the list has
+        // genuinely ended. Either way, going round again would just repeat.
+        if (found.size === before) break;
       }
-      harvest(findTable() || table, found);
-      report(`Reading the list… ${found.size}${target ? ` of ${target}` : ''} orders`);
-      if (ranOut) break;
-
-      const before = found.size;
-      if (!(await nextPage(table, box))) break;
-      box.scrollTop = 0;
-      harvest(findTable() || table, found);
-
-      // The control we clicked was not pagination after all, or the list has
-      // genuinely ended. Either way, going round again would just repeat.
-      if (found.size === before) break;
+    } finally {
+      stopWatching();
     }
 
-    return { items: [...found.values()], ranOut, target };
+    harvest(currentTable() || table, found);
+    const items = [...found.values()];
+    return { items, photoless: items.filter((i) => !i.imageUrl).length, ranOut, target };
   }
 
   // ---------- sending ----------
@@ -293,7 +405,7 @@
    * nothing reaches the server and nothing is stored.
    */
   async function preview(report) {
-    const { items, ranOut, target } = await collectAll(report);
+    const { items, photoless, ranOut, target } = await collectAll(report);
     if (!items.length) {
       throw new Error(`Found no orders with a product photo. (What is here — ${describePage()})`);
     }
@@ -302,6 +414,7 @@
     console.log('[ProfX] preview — all rows read from this page:', items);
     return {
       scanned: items.length,
+      photoless,
       withSku,
       ranOut,
       target,
@@ -313,22 +426,25 @@
     const status = await send('status');
     if (!status.signedIn) throw new Error('Sign in from the ProfX extension popup first.');
 
-    const { items, ranOut, target } = await collectAll(report);
+    const { items, photoless, ranOut, target } = await collectAll(report);
     if (!items.length) {
       throw new Error(`Found no orders with a product photo. (What is here — ${describePage()})`);
     }
 
+    // Only a row whose photo was on the page can be sent. Any that were read
+    // before their photo arrived are counted and reported, not quietly dropped.
+    const sendable = items.filter((i) => i.imageUrl);
     const totals = { rows: 0, imagesSaved: 0, imagesSkipped: 0, unresolved: 0, target };
-    for (let i = 0; i < items.length; i += CHUNK) {
-      const batch = items.slice(i, i + CHUNK);
-      report(`Saving ${Math.min(i + batch.length, items.length)} of ${items.length}…`);
+    for (let i = 0; i < sendable.length; i += CHUNK) {
+      const batch = sendable.slice(i, i + CHUNK);
+      report(`Saving ${Math.min(i + batch.length, sendable.length)} of ${sendable.length}…`);
       const res = await send('ingest', { items: batch });
       totals.rows += res.rows || 0;
       totals.imagesSaved += res.imagesSaved || 0;
       totals.imagesSkipped += res.imagesSkipped || 0;
       totals.unresolved += res.unresolved || 0;
     }
-    return { ...totals, scanned: items.length, ranOut };
+    return { ...totals, scanned: items.length, photoless, ranOut };
   }
 
   // ---------- the on-page panel ----------
@@ -384,6 +500,7 @@
     `Done — ${r.scanned}${r.target ? ` of ${r.target}` : ''} orders, ${r.imagesSaved} new photos` +
     (r.imagesSkipped ? `, ${r.imagesSkipped} already saved` : '') +
     (r.unresolved ? `, ${r.unresolved} with no SKU` : '') +
+    (r.photoless ? `, ${r.photoless} whose photo had not loaded` : '') + '.' +
     shortfall(r) + tooSlow(r));
 
   const mount = () => document.body && document.body.appendChild(panel);
