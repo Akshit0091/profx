@@ -14,19 +14,24 @@
   color: var(--text-muted);
 }
 
-/* ---------- camera ---------- */
+/* ---------- the stage ----------
+   One frame for the whole cycle: the viewfinder, then the parcel that was
+   scanned. Keeping the box the same size through both means the page does not
+   jump under the thumb between parcels. */
 
 .scan-stage {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
-  background: #0f172a;
+  background: #0b1222;
   border-radius: var(--radius-lg);
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.25s ease;
 }
+.scan-stage.has-parcel { background: #f1f5f9; }
 
 .scan-video {
   width: 100%;
@@ -36,30 +41,170 @@
 .scan-video.hidden { display: none; }
 .scan-video.mirrored { transform: scaleX(-1); }
 
+/* ---------- viewfinder ----------
+   Corner brackets rather than a closed box: they mark the target without
+   hiding any of the label, and they read as "aim here" at a glance. The
+   barcode on a Meesho label is wide and short, so the window is too. */
+
+.scan-frame {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 50%;
+  height: 30%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  /* Everything outside the window is dimmed, which is what makes the window
+     itself visible without drawing a single line across the label. */
+  box-shadow: 0 0 0 100vmax rgba(8, 14, 28, 0.45);
+  border-radius: 10px;
+}
+
+.scan-frame .c {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 3px solid #fff;
+}
+.scan-frame .tl { top: -2px; left: -2px;  border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+.scan-frame .tr { top: -2px; right: -2px; border-left: 0;  border-bottom: 0; border-radius: 0 10px 0 0; }
+.scan-frame .bl { bottom: -2px; left: -2px;  border-right: 0; border-top: 0; border-radius: 0 0 0 10px; }
+.scan-frame .br { bottom: -2px; right: -2px; border-left: 0;  border-top: 0; border-radius: 0 0 10px 0; }
+
+/* A line travelling down the window. It does nothing functionally — it is
+   there so the screen reads as "working" while the packer lines the label up,
+   instead of looking frozen. */
+.scan-sweep {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+  animation: scan-sweep 2s ease-in-out infinite;
+}
+@keyframes scan-sweep {
+  0%   { top: 4px;  opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { top: calc(100% - 6px); opacity: 0; }
+}
+
+/* Someone who has asked for less motion gets a steady line instead. */
+@media (prefers-reduced-motion: reduce) {
+  .scan-sweep { animation: none; top: 50%; opacity: 0.9; }
+}
+
+.scan-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(8, 14, 28, 0.72);
+  color: #e2e8f0;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Small, round, and over the picture: a text button on its own row would cost
+   a line of height on every screen for something used once a week. */
+.scan-flip {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(8, 14, 28, 0.6);
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.scan-flip:active { background: rgba(8, 14, 28, 0.85); }
+
 .scan-idle {
-  color: #cbd5e1;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: #94a3b8;
   font-size: 14px;
   text-align: center;
   padding: 0 28px;
   line-height: 1.6;
 }
+.scan-idle p { margin: 0; }
 
-/* A frame to aim with. The barcode on a Meesho label is wide and short, so the
-   window is too — it tells the packer how to hold the sheet without any text. */
-.scan-reticle {
+/* An unknown code does not stop the scan, so it is said over the viewfinder
+   where it will be seen, not below the fold where it will not. */
+.scan-miss {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  top: 50%;
-  height: 26%;
-  transform: translateY(-50%);
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  box-shadow: 0 0 0 100vmax rgba(15, 23, 42, 0.35);
-  pointer-events: none;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 13px;
+  border-radius: var(--radius);
+  background: rgba(217, 119, 6, 0.94);
+  color: #fff;
+  font-size: 13px;
+}
+.scan-miss .mono { opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- the parcel ----------
+   The photo is the whole point of the screen: it has to be recognisable at
+   arm's length, so it takes the whole frame and is never cropped. */
+
+.scan-shot {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: scan-pop 0.22s ease-out both;
+}
+@keyframes scan-pop {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-shot { animation: none; }
 }
 
-/* One button on its own fills the row; the flip sits beside Stop. */
+.scan-noshot {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+  padding: 0 28px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.scan-noshot p { margin: 0; }
+.scan-noshot-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* ---------- actions ---------- */
+
 .scan-actions {
   display: flex;
   gap: 10px;
@@ -78,13 +223,16 @@
 }
 .btn-go { background: var(--gradient); }
 .btn-stop { background: var(--error); }
-.btn-flip {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  white-space: nowrap;
-  flex: 0 0 auto;
+
+/* The one button pressed on every single parcel, so it is the biggest thing
+   on the screen after the photo. */
+.btn-next {
+  background: var(--success);
+  font-size: 16px;
+  padding: 15px 16px;
 }
+.btn-next:active { transform: scale(0.99); }
+
 .btn-secondary {
   width: auto;
   padding: 10px 16px;
@@ -92,6 +240,58 @@
   color: var(--text);
   border: 1px solid var(--border-strong);
   font-size: 14px;
+}
+
+/* Two ways of working, side by side, so the choice is visible rather than
+   buried in a settings screen that nobody standing at a table will open. */
+.scan-mode {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  margin: 0 0 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.scan-mode button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.scan-mode button.is-on {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Scanning continuously, the product has to share the screen with a live
+   camera, so it is shown small beside its details instead. */
+.scan-result.with-thumb {
+  display: flex;
+  flex-direction: row-reverse;   /* picture on the right, words on the left */
+  align-items: flex-start;
+  gap: 14px;
+}
+.scan-result.with-thumb .scan-result-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.scan-thumb {
+  flex: 0 0 92px;
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
+  border-radius: var(--radius);
+  background: var(--bg);
 }
 
 .scan-msg {
@@ -104,59 +304,54 @@
 .scan-msg.error  { background: var(--error-soft);   color: #991b1b; }
 .scan-msg.notice { background: var(--success-soft); color: #065f46; }
 
-/* ---------- the hit ---------- */
+/* ---------- what was scanned ---------- */
 
 .scan-result {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  padding: 14px 16px 16px;
   margin-bottom: 20px;
 }
 .scan-result.miss { border-color: var(--warning); }
+.scan-result p { margin: 0 0 8px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
 
-/* The photo is the whole point of the screen: it should be recognisable from
-   arm's length, so it gets the full width and is never cropped. */
-.scan-photo {
-  display: block;
-  width: 100%;
-  max-height: 58vh;
-  object-fit: contain;
-  background: #f8fafc;
-  border-bottom: 1px solid var(--border);
-}
-.scan-photo.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 36px 24px;
-  height: auto;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.scan-info { padding: 14px 16px 16px; }
-.scan-info h2 {
-  margin: 0 0 10px;
+.scan-title {
+  margin: 0 0 12px;
   font-size: 17px;
   line-height: 1.4;
 }
-.scan-info p { margin: 0 0 8px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
 
-.scan-info dl { margin: 0; display: grid; gap: 4px; }
-.scan-info dl > div {
+.scan-facts { margin: 0; display: grid; gap: 4px; }
+.scan-facts > div {
   display: flex;
   justify-content: space-between;
   gap: 14px;
   font-size: 13.5px;
-  padding: 3px 0;
+  padding: 4px 0;
   border-bottom: 1px solid var(--border);
 }
-.scan-info dl > div:last-child { border-bottom: 0; }
-.scan-info dt { color: var(--text-muted); flex-shrink: 0; }
-.scan-info dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.scan-facts > div:last-child { border-bottom: 0; }
+.scan-facts dt { color: var(--text-muted); flex-shrink: 0; }
+.scan-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+/* More than one of the same book in a parcel is the easiest thing to get
+   wrong, so the number says so. */
+/* A sub-order or an AWB is long enough that squeezing it to the right of a
+   label leaves it unreadable, so those rows stack instead. */
+.scan-facts > div.wide {
+  display: block;
+  padding: 6px 0;
+}
+.scan-facts > div.wide dd {
+  text-align: left;
+  margin-top: 2px;
+}
+
+.scan-facts dd.big {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 15px;
+}
 
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
 .small { font-size: 12.5px; }
@@ -179,7 +374,7 @@
   padding: 11px 12px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  font-size: 15px; /* under 16px, iOS Safari zooms the page on focus */
+  font-size: 15px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -189,4 +384,11 @@
   color: var(--text-soft);
   line-height: 1.55;
   margin: 0 0 8px;
+}
+
+/* On a phone the stage gets as much height as it can take, since the photo is
+   what the packer is actually looking at. */
+@media (max-width: 768px) {
+  .scan { padding: 4px 0 20px; }
+  .scan-stage { aspect-ratio: 3 / 4; max-height: 56vh; }
 }
