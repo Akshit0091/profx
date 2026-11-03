@@ -17,6 +17,7 @@ const supplierOrdersRoutes = require('./routes/supplierOrders');
 const imageToolsRoutes = require('./routes/imageTools');
 const imageGenRoutes  = require('./routes/imageGen');
 const scanRoutes      = require('./routes/scan');
+const { startKeepAwake } = require('./utils/keepAwake');
 
 const app = express();
 
@@ -67,4 +68,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`ProfX backend listening on 0.0.0.0:${PORT}`);
+  // Keeps the host from stopping the service for inactivity. Does nothing
+  // locally, where there is no public URL to call.
+  startKeepAwake();
 });

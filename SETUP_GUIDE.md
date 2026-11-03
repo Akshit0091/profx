@@ -192,6 +192,41 @@ Production runs at **`https://profx-api.onrender.com`**, with the database on
 > table that already has rows, and the deploy will fail. Add it as nullable, backfill
 > it, then set `NOT NULL` — directly against the database, before you deploy.
 
+### Keeping the service awake
+
+Render stops a free service after **15 idle minutes**, and starting it again takes
+the better part of a minute. A packer who scans a parcel and waits that long does not
+experience a cold start; they experience the app being broken.
+
+The backend pings its own `/api/health` every 13 minutes to stop the idle clock ever
+running out. It uses `RENDER_EXTERNAL_URL`, which Render sets itself, so **there is
+nothing to configure** — it is on in production and silent locally, where there is no
+public URL to call.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `KEEP_AWAKE` | on | `off` disables the whole thing |
+| `KEEP_AWAKE_MINUTES` | `13` | Gap between pings. Must stay under 15 |
+| `KEEP_AWAKE_URL` | `RENDER_EXTERNAL_URL` | Override, for a host that does not announce itself |
+| `KEEP_AWAKE_FROM` / `KEEP_AWAKE_TO` | unset | Hours to stay awake between, e.g. `6` and `1`. Unset means always |
+| `KEEP_AWAKE_TZ` | `Asia/Kolkata` | Whose hours those are |
+
+**Watch the free-tier hours.** A free Render plan allows 750 instance-hours a month,
+and staying up around the clock spends about 730 of them — fine for one service, not
+enough for two. If you add another, set a window: `KEEP_AWAKE_FROM=6`, `KEEP_AWAKE_TO=1`
+keeps it up 06:00–01:00 IST and costs about 570 hours.
+
+**What this cannot do** is wake a service that is already asleep — nothing running
+inside it can. It does not need to: the service is awake when it boots, and after that
+it is never idle long enough to be stopped. The gap is a crash or a long outage. If you
+want cover for that too, point a free external pinger such as
+[cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com) at
+`https://profx-api.onrender.com/api/health` every 10 minutes. That runs outside Render,
+so it can wake a stopped service rather than only keeping a running one up.
+
+The pings identify themselves as `profx-keep-awake` in the access log. The service logs
+one line a day while it is working, and a warning on every failed ping.
+
 ### Frontend → Vercel
 
 1. [https://vercel.com](https://vercel.com) → **Add New Project → Import Git Repository**
