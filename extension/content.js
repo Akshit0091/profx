@@ -12,6 +12,9 @@
   window.__profxScanLoaded = true;
 
   const SUB_ORDER_RE = /\b(\d{15,20}_\d+)\b/;
+  // The same pattern, for counting every one on the page rather than
+  // pulling one out of a row.
+  const SUB_ORDER_ALL = /\b\d{15,20}_\d+\b/g;
   // Small batches: the server fetches a photo per new SKU, so one huge request
   // would sit there for minutes with nothing to show for it. 40 keeps the
   // progress line moving and keeps any single request well short of a proxy
@@ -25,7 +28,7 @@
   const MAX_PAGES = 60;
   // Shown in the panel. Without it there is no way to tell, from a screenshot
   // of a run, whether the extension was reloaded after a change.
-  const VERSION = '2026-11-03b';
+  const VERSION = '2026-11-03c';
   const STEP = 0.5;           // of a screen per scroll step, so every row is on screen a while
   const PASSES = 3;           // trips down the list; a later one picks up what an earlier missed
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
@@ -170,6 +173,14 @@
     return 0;
   }
 
+  /**
+   * Rows that went past and could not be read. A row with no sub-order ID in
+   * it is skipped, and silently: this is the count that separates "the row
+   * was never on the page" from "the row was there and we turned it away",
+   * which look identical in the total at the end.
+   */
+  const turnedAway = new Set();
+
   function harvest(table, into) {
     if (!table) return 0;
     const idx = headerIndex(table);
@@ -177,7 +188,11 @@
     let added = 0;
     for (const row of body.querySelectorAll('tr')) {
       const item = readRow(row, idx);
-      if (item) added += merge(into, item);
+      if (item) { added += merge(into, item); continue; }
+      // Keyed by its text so the same unreadable row is not counted on every
+      // pass; a header row has no cells of its own, so it does not count.
+      const text = norm(row.textContent);
+      if (text && row.querySelector('td')) turnedAway.add(text.slice(0, 120));
     }
     return added;
   }
@@ -250,6 +265,21 @@
     return `tables: ${tables}, aria grids: ${grids}, http images: ${photos}, sub-order IDs in text: ${subOrders}`;
   }
 
+  /**
+   * What the page holds right now, as opposed to what was read from it.
+   *
+   * Two things a total alone cannot tell apart: a grid split across several
+   * tables, of which only the first is ever read, and a grid whose rows
+   * simply never render. Counting both settles it.
+   */
+  function census() {
+    const tables = [...document.querySelectorAll('table')]
+      .filter((t) => /sub[-\s]?order/i.test(t.textContent || ''));
+    const rows = tables.reduce(
+      (n, t) => n + (t.querySelector('tbody') || t).querySelectorAll('tr').length, 0);
+    return { tables: tables.length, rows };
+  }
+
   async function collectAll(report) {
     const table = findTable();
     if (!table) {
@@ -302,6 +332,11 @@
     // several possible causes that look identical from the outside, and these
     // are the numbers that tell them apart.
     const seen = { steps: 0, boxH: 0, bandH: 0, mostRows: 0, passes: 0 };
+    // Every sub-order ID that has appeared in the table, read straight out of
+    // its text. A row that rendered is in here whether or not it could be
+    // parsed, so comparing this with what was collected says which half of
+    // the job is failing.
+    const idsOnPage = new Set();
 
     const stepScroll = () => {
       const rendered = renderedHeight();
@@ -330,6 +365,25 @@
       await sleep(SETTLE_MS);
     };
 
+    /**
+     * Every sub-order ID visible in a cell, read cell by cell.
+     *
+     * Not from the whole table at once: textContent runs adjacent cells
+     * together, so the order number in the product cell ends up glued to the
+     * sub-order beside it and the pattern can find no boundary between them.
+     */
+    const noteIds = () => {
+      const t = currentTable();
+      if (!t) return;
+      const body = t.querySelector('tbody') || t;
+      for (const row of body.querySelectorAll('tr')) {
+        for (const cell of row.children) {
+          const hits = norm(cell.textContent).match(SUB_ORDER_ALL);
+          if (hits) for (const id of hits) idsOnPage.add(id);
+        }
+      }
+    };
+
     const progress = () =>
       report(`Reading the list… ${found.size}${target ? ` of ${target}` : ''} orders`);
 
@@ -356,6 +410,7 @@
             const added = harvest(currentTable() || table, found);
             const onScreen = rowCount();
             if (onScreen > seen.mostRows) seen.mostRows = onScreen;
+            noteIds();
             progress();
 
             // Everything the tab promised is in hand, so there is nothing to be
@@ -404,9 +459,13 @@
 
     harvest(currentTable() || table, found);
     const items = [...found.values()];
+    noteIds();
+    const now = census();
     const diag =
       `v${VERSION} · ${seen.passes} pass(es), ${seen.steps} steps, ` +
-      `box ${seen.boxH}px, rows band ${seen.bandH}px, most rows at once ${seen.mostRows}`;
+      `box ${seen.boxH}px, rows band ${seen.bandH}px, most rows at once ${seen.mostRows}, ` +
+      `ids seen ${idsOnPage.size}, unreadable rows ${turnedAway.size}, ` +
+      `now ${now.tables} table(s)/${now.rows} rows`;
 
     return {
       items,
