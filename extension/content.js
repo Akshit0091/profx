@@ -25,7 +25,7 @@
   const MAX_PAGES = 60;
   // Shown in the panel. Without it there is no way to tell, from a screenshot
   // of a run, whether the extension was reloaded after a change.
-  const VERSION = '2026-11-03a';
+  const VERSION = '2026-11-03b';
   const STEP = 0.5;           // of a screen per scroll step, so every row is on screen a while
   const PASSES = 3;           // trips down the list; a later one picks up what an earlier missed
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
@@ -480,18 +480,99 @@
 
   // ---------- the on-page panel ----------
 
+  const POS_KEY = 'profx.panel.pos';
+  const FOLD_KEY = 'profx.panel.folded';
+
   const panel = document.createElement('div');
   panel.className = 'profx-panel';
   panel.innerHTML = `
-    <div class="profx-title">ProfX <span class="profx-ver"></span></div>
-    <div class="profx-status">Ready</div>
-    <button class="profx-check" type="button">Preview — read, send nothing</button>
-    <button class="profx-go" type="button">Save product images</button>
+    <div class="profx-bar">
+      <div class="profx-title">ProfX <span class="profx-ver"></span></div>
+      <button class="profx-fold" type="button" title="Collapse" aria-label="Collapse">–</button>
+    </div>
+    <div class="profx-body">
+      <div class="profx-status">Ready</div>
+      <button class="profx-check" type="button">Preview — read, send nothing</button>
+      <button class="profx-go" type="button">Save product images</button>
+    </div>
   `;
   panel.querySelector('.profx-ver').textContent = VERSION;
   // Also in the status line, which is the part that ends up in a screenshot.
   panel.querySelector('.profx-status').textContent = `Ready · v${VERSION}`;
   const statusEl = panel.querySelector('.profx-status');
+  const bar = panel.querySelector('.profx-bar');
+  const foldBtn = panel.querySelector('.profx-fold');
+
+  // ---------- where the panel sits ----------
+
+  /**
+   * Meesho puts its own controls along the bottom of the orders page, and a
+   * panel parked on top of them is worse than no panel. There is no corner
+   * that is reliably free, though, so rather than guessing at one this can be
+   * dragged anywhere and folded away, and it remembers both.
+   */
+  const remembered = (key) => {
+    try { return localStorage.getItem(key); } catch { return null; }
+  };
+  const remember = (key, value) => {
+    try { localStorage.setItem(key, value); } catch { /* private windows refuse */ }
+  };
+
+  /** Puts the panel at x,y, kept wholly on screen whatever the window did. */
+  function place(x, y) {
+    const w = panel.offsetWidth || 260;
+    const h = panel.offsetHeight || 140;
+    const left = Math.max(8, Math.min(x, window.innerWidth - w - 8));
+    const top = Math.max(8, Math.min(y, window.innerHeight - h - 8));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    return { x: left, y: top };
+  }
+
+  let drag = null;
+
+  bar.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.profx-fold')) return;   // that button is not a handle
+    const r = panel.getBoundingClientRect();
+    drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    panel.classList.add('is-dragging');
+    try { bar.setPointerCapture(e.pointerId); } catch { /* older engines */ }
+    e.preventDefault();
+  });
+
+  bar.addEventListener('pointermove', (e) => {
+    if (drag) place(e.clientX - drag.dx, e.clientY - drag.dy);
+  });
+
+  const endDrag = () => {
+    if (!drag) return;
+    drag = null;
+    panel.classList.remove('is-dragging');
+    const r = panel.getBoundingClientRect();
+    remember(POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
+  };
+  bar.addEventListener('pointerup', endDrag);
+  bar.addEventListener('pointercancel', endDrag);
+
+  foldBtn.addEventListener('click', () => {
+    const folded = panel.classList.toggle('is-folded');
+    foldBtn.textContent = folded ? '+' : '–';
+    foldBtn.title = folded ? 'Expand' : 'Collapse';
+    foldBtn.setAttribute('aria-label', foldBtn.title);
+    remember(FOLD_KEY, folded ? '1' : '0');
+    // Folding changes the height, which can leave it hanging off the bottom.
+    const r = panel.getBoundingClientRect();
+    if (panel.style.left) place(r.left, r.top);
+  });
+
+  // A window that shrinks must not take the panel off screen with it.
+  window.addEventListener('resize', () => {
+    if (!panel.style.left) return;
+    const r = panel.getBoundingClientRect();
+    place(r.left, r.top);
+  });
   const button = panel.querySelector('.profx-go');
   const checkButton = panel.querySelector('.profx-check');
   const report = (text) => { statusEl.textContent = text; };
@@ -540,7 +621,21 @@
     (r.photoless ? `, ${r.photoless} whose photo had not loaded` : '') + '.' +
     shortfall(r) + tooSlow(r));
 
-  const mount = () => document.body && document.body.appendChild(panel);
+  const mount = () => {
+    if (!document.body) return;
+    document.body.appendChild(panel);
+
+    if (remembered(FOLD_KEY) === '1') {
+      panel.classList.add('is-folded');
+      foldBtn.textContent = '+';
+      foldBtn.title = 'Expand';
+      foldBtn.setAttribute('aria-label', foldBtn.title);
+    }
+
+    let saved = null;
+    try { saved = JSON.parse(remembered(POS_KEY) || 'null'); } catch { saved = null; }
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) place(saved.x, saved.y);
+  };
   if (document.body) mount();
   else document.addEventListener('DOMContentLoaded', mount, { once: true });
 })();

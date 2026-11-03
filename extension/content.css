@@ -5,7 +5,9 @@
 .profx-panel {
   position: fixed;
   right: 20px;
-  bottom: 20px;
+  /* Clear of the row of buttons Meesho puts along the bottom of the orders
+     page. Only a starting point: the panel can be dragged anywhere. */
+  bottom: 96px;
   z-index: 2147483000;
   width: 260px;
   padding: 14px 16px;
@@ -22,14 +24,52 @@
 .profx-panel.profx-done   { border-left-color: #16a34a; }
 .profx-panel.profx-error  { border-left-color: #dc2626; }
 
+/* The title doubles as the drag handle, so it spans the panel and carries
+   the fold button at its end. */
+.profx-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;          /* or a drag scrolls the page instead */
+}
+.profx-panel.is-dragging .profx-bar { cursor: grabbing; }
+.profx-panel.is-dragging {
+  box-shadow: 0 16px 40px rgba(16, 20, 38, 0.28);
+  opacity: 0.96;
+}
+
 .profx-title {
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #4f46e5;
-  margin-bottom: 6px;
 }
+
+.profx-fold {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #e2e4ea;
+  border-radius: 6px;
+  background: #f7f8fb;
+  color: #5b6070;
+  font: 600 14px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.profx-fold:hover { background: #eef0f6; color: #1f2330; }
+
+/* Folded, it is just the title: still says which build is running, and gets
+   out of the way of whatever it was sitting on. */
+.profx-panel.is-folded { width: auto; padding: 8px 12px; }
+.profx-panel.is-folded .profx-bar { margin-bottom: 0; }
+.profx-panel.is-folded .profx-body { display: none; }
 
 /* Build marker. Small and grey: it is only there to show which copy of the
    extension is running, so a stale one is obvious from a screenshot. */
