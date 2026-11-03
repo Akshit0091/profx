@@ -489,6 +489,8 @@
     <button class="profx-go" type="button">Save product images</button>
   `;
   panel.querySelector('.profx-ver').textContent = VERSION;
+  // Also in the status line, which is the part that ends up in a screenshot.
+  panel.querySelector('.profx-status').textContent = `Ready · v${VERSION}`;
   const statusEl = panel.querySelector('.profx-status');
   const button = panel.querySelector('.profx-go');
   const checkButton = panel.querySelector('.profx-check');
