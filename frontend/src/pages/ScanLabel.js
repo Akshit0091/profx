@@ -487,11 +487,13 @@ export default function ScanLabel() {
       {notice && <p className="scan-msg notice">{notice}</p>}
 
       {parcel && (
-        <section className={`scan-result ${!showingParcel && parcel.image ? 'with-thumb' : ''}`}>
-          {/* Scanning continuously the frame is still the camera, so this is
-              the only place the product can be seen. */}
+        <section className={`scan-result ${!showingParcel && parcel.image ? 'with-photo' : ''}`}>
+          {/* Scanning continuously the frame stays on the camera, so this is
+              the only place the product can be seen — and it is what the packer
+              is checking the parcel against, so it gets the full width here too
+              rather than being shrunk to a corner. */}
           {!showingParcel && parcel.image && (
-            <img className="scan-thumb" src={parcel.image} alt={parcel.title || parcel.sku} />
+            <img className="scan-photo" src={parcel.image} alt={parcel.title || parcel.sku} />
           )}
           <div className="scan-result-body">
           <h2 className="scan-title">{parcel.title || parcel.sku}</h2>

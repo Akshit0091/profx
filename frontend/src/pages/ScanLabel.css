@@ -273,25 +273,25 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* Scanning continuously, the product has to share the screen with a live
-   camera, so it is shown small beside its details instead. */
-.scan-result.with-thumb {
-  display: flex;
-  flex-direction: row-reverse;   /* picture on the right, words on the left */
-  align-items: flex-start;
-  gap: 14px;
+/* Scanning continuously, the frame above stays on the camera, so this is the
+   only sight of the product — and it is the thing being checked against the
+   parcel. It gets the full width, with the details underneath it, rather than
+   being shrunk into a corner of a row of text. */
+.scan-result.with-photo {
+  padding: 0;
+  overflow: hidden;
 }
-.scan-result.with-thumb .scan-result-body {
-  flex: 1 1 auto;
-  min-width: 0;
+.scan-result.with-photo .scan-result-body {
+  padding: 14px 16px 16px;
 }
-.scan-thumb {
-  flex: 0 0 92px;
-  width: 92px;
-  height: 92px;
+.scan-photo {
+  display: block;
+  width: 100%;
+  height: auto;          /* no fixed ratio: a cover shows at its own shape */
+  max-height: 70vh;
   object-fit: contain;
-  border-radius: var(--radius);
   background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .scan-msg {
