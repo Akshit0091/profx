@@ -25,7 +25,7 @@
   const MAX_PAGES = 60;
   // Shown in the panel. Without it there is no way to tell, from a screenshot
   // of a run, whether the extension was reloaded after a change.
-  const VERSION = '2026-11-02b';
+  const VERSION = '2026-11-03a';
   const STEP = 0.5;           // of a screen per scroll step, so every row is on screen a while
   const PASSES = 3;           // trips down the list; a later one picks up what an earlier missed
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
