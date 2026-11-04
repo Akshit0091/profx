@@ -28,7 +28,7 @@
   const MAX_PAGES = 60;
   // Shown in the panel. Without it there is no way to tell, from a screenshot
   // of a run, whether the extension was reloaded after a change.
-  const VERSION = '2026-11-03c';
+  const VERSION = '2026-11-04a';
   const STEP = 0.5;           // of a screen per scroll step, so every row is on screen a while
   const PASSES = 3;           // trips down the list; a later one picks up what an earlier missed
   const BUDGET_MS = 10 * 60 * 1000;  // overall ceiling on one run
@@ -147,13 +147,33 @@
   }
 
   /**
-   * How many orders the tab says there are, e.g. "Ready to Ship (352)". Knowing
-   * the target is what tells the difference between a list that has ended and
-   * one that is still loading, so it is worth reading even though it is only a
-   * label on the page.
+   * How many orders the open tab says there are, e.g. "Ready to Ship (213)".
+   *
+   * It has to be the tab that is open, which is not the same as the first one
+   * on the page carrying a number: with orders waiting, "Pending (244)" sits
+   * to the left of "Ready to Ship (213)" and reading the page in order picks
+   * the wrong one — which showed up as a shortfall of exactly the difference
+   * between two tabs nobody was looking at.
+   *
+   * The URL names the open tab, so that is what is looked for.
    */
+  function tabCount(text, label) {
+    const pattern = label.replace(/[^a-z0-9 ]/gi, '').trim().replace(/\s+/g, '\\s*');
+    if (!pattern) return null;
+    const m = text.match(new RegExp(pattern + '\\s*\\((\\d[\\d,]*)\\)', 'i'));
+    return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+  }
+
   function expectedCount() {
     const text = document.body ? (document.body.innerText || document.body.textContent || '') : '';
+
+    // /fulfillment/x/orders/ready-to-ship → "ready to ship"
+    const slug = (location.pathname.split('/').filter(Boolean).pop() || '').replace(/-/g, ' ');
+    const fromUrl = slug ? tabCount(text, slug) : null;
+    if (fromUrl !== null) return fromUrl;
+
+    // Nothing in the URL to go on: fall back to the first tab with a count,
+    // which is right whenever only one of them has one.
     const m = text.match(/(?:Ready to Ship|Pending|On Hold|Shipped|Cancelled)\s*\((\d[\d,]*)\)/i);
     return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
   }
@@ -216,7 +236,12 @@
       setTimeout(read, 0);
     });
     const root = document.body || document.documentElement;
-    if (root) observer.observe(root, { childList: true, subtree: true });
+    // characterData as well as childList: a cell whose text is rewritten in
+    // place, rather than replaced, is still a row that has just become
+    // readable, and watching only for added nodes would miss it.
+    if (root) {
+      observer.observe(root, { childList: true, subtree: true, characterData: true });
+    }
     return () => observer.disconnect();
   }
 
@@ -461,11 +486,25 @@
     const items = [...found.values()];
     noteIds();
     const now = census();
+
+    // A row with a long number in it had its data and still could not be
+    // read, which is a parsing problem. One without is a row the page had not
+    // filled in yet, which usually fixes itself on the next look. The two
+    // need telling apart before either is worth chasing.
+    let withData = 0;
+    for (const t of turnedAway) if (/\d{15,20}/.test(t)) withData += 1;
+    const samples = [...turnedAway]
+      .filter((t) => /\d{15,20}/.test(t))
+      .slice(0, 2)
+      .map((t) => `"${t.slice(0, 70)}"`)
+      .join(' | ');
     const diag =
       `v${VERSION} · ${seen.passes} pass(es), ${seen.steps} steps, ` +
       `box ${seen.boxH}px, rows band ${seen.bandH}px, most rows at once ${seen.mostRows}, ` +
-      `ids seen ${idsOnPage.size}, unreadable rows ${turnedAway.size}, ` +
-      `now ${now.tables} table(s)/${now.rows} rows`;
+      `ids seen ${idsOnPage.size}, ` +
+      `unreadable ${turnedAway.size} (${withData} with data), ` +
+      `now ${now.tables} table(s)/${now.rows} rows` +
+      (samples ? ` — ${samples}` : '');
 
     return {
       items,
