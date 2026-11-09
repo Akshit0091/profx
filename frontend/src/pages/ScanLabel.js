@@ -2,14 +2,57 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../utils/api';
 import './ScanLabel.css';
 
-// Chrome on Android decodes barcodes natively, which is faster and keeps the
-// bundle small. Safari has no such engine, so ZXing is pulled in only on the
-// phones that actually need it.
-const HAS_NATIVE = typeof window !== 'undefined' && 'BarcodeDetector' in window;
-
 // Shipping labels use Code 128 almost everywhere; the rest are here because
 // couriers do occasionally switch, and listing them costs nothing.
 const FORMATS = ['code_128', 'code_39', 'codabar', 'itf', 'ean_13', 'qr_code', 'data_matrix'];
+
+/**
+ * Whether this browser can decode barcodes itself, and which kinds.
+ *
+ * Chrome on Android can, which is faster and keeps the bundle small. Nothing
+ * on a desktop can — Chrome on Windows has no BarcodeDetector at all — and
+ * neither does Safari, so ZXing carries every PC and every iPhone.
+ *
+ * Being present is not the same as working: on some builds the constructor
+ * exists and the engine behind it reports no formats whatsoever, and a
+ * detector made from it throws on every single frame. Asking what it can read
+ * is the only honest test. Asked once, because the answer cannot change.
+ */
+let nativeFormats = null;
+async function nativeSupport() {
+  if (nativeFormats !== null) return nativeFormats;
+  nativeFormats = [];
+  if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+    try {
+      const supported = await window.BarcodeDetector.getSupportedFormats();
+      nativeFormats = FORMATS.filter((f) => supported.includes(f));
+    } catch {
+      nativeFormats = [];
+    }
+  }
+  return nativeFormats;
+}
+
+/**
+ * Resolves once the video actually has a picture, which is not the same as the
+ * stream being live: a camera reports a width and height of zero until its
+ * first frame has decoded, and on a PC webcam that warm-up runs to a second or
+ * two. Anything that measures the picture before then measures nothing.
+ */
+function framesFlowing(video, timeoutMs = 8000) {
+  if (video.videoWidth > 0 && video.videoHeight > 0) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const finish = (ok) => { clearInterval(poll); clearTimeout(bail); resolve(ok); };
+    const poll = setInterval(() => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) finish(true);
+    }, 50);
+    const bail = setTimeout(() => finish(false), timeoutMs);
+  });
+}
+
+// How many times a decode loop that has died is put back on its feet before
+// the packer is told to stop waiting and type the code instead.
+const MAX_RESTARTS = 5;
 
 // Scanning continuously, a label left sitting in frame would be read again and
 // again, beeping each time. This is how long the same code is ignored for —
@@ -90,6 +133,13 @@ export default function ScanLabel() {
   const detectorRef = useRef(null);
   const lastRef = useRef({ code: '', at: 0 });
   const liveRef = useRef(false);
+  // How many times this scanning session has had to restart a decode loop that
+  // died. Counted so that a camera failing for some reason nobody foresaw ends
+  // in an explanation rather than in restarting for ever.
+  const restartsRef = useRef(0);
+  // The typed-code box, so a scanner gun can send one parcel after another
+  // without the focus having to be put back by hand.
+  const manualRef = useRef(null);
   // Mirrors the facing state so that starting the camera does not have to
   // wait for a render to know which one was asked for.
   const facingRef = useRef(facing);
@@ -116,30 +166,122 @@ export default function ScanLabel() {
     }
   }, []);
 
-  /** Starts the decode loop against the stream already playing. */
+  /**
+   * Decoding in JavaScript, which is every PC and every iPhone.
+   *
+   * ZXing's scan loop retries after "no barcode in this frame" and gives up for
+   * good on anything else — silently, with no way to ask it afterwards. So it
+   * is started through scan() rather than decodeFromVideoElement(), because
+   * that is the form that reports a loop that has died, and a dead loop is put
+   * back rather than left behind a preview that will never read again.
+   */
+  const startZxing = useCallback(async (onCode) => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] =
+        await Promise.all([import('@zxing/browser'), import('@zxing/library')]);
+      if (!liveRef.current) return;
+
+      // Told what to look for, it stops spending frames on formats no courier
+      // prints; TRY_HARDER buys the extra passes a webcam's softer, flatter
+      // picture needs to find the bars at all.
+      const hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.ITF,
+        BarcodeFormat.CODABAR, BarcodeFormat.EAN_13,
+        BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX,
+      ]);
+      hints.set(DecodeHintType.TRY_HARDER, true);
+
+      // Twice a second is the library's own default, and it feels broken to
+      // someone holding a parcel up to a camera waiting for a beep.
+      const reader = new BrowserMultiFormatReader(hints, {
+        delayBetweenScanAttempts: 100,
+        delayBetweenScanSuccess: 300,
+      });
+
+      const run = () => {
+        zxingRef.current = reader.scan(
+          video,
+          (res) => { if (res && liveRef.current) onCode(res.getText()); },
+          (err) => {
+            // Finishing with no error means stop() was called, and that was us.
+            if (!err || !liveRef.current) return;
+            if (restartsRef.current >= MAX_RESTARTS) {
+              setError('The barcode reader keeps failing on this camera. '
+                + 'Type the code below, or scan into that box with a scanner gun.');
+              return;
+            }
+            restartsRef.current += 1;
+            // A fresh scan() measures the picture again, which is the fix for
+            // the commonest cause of the loop dying in the first place.
+            setTimeout(() => { if (liveRef.current) run(); }, 300);
+          },
+        );
+      };
+      run();
+    } catch (err) {
+      setError('Could not start the barcode decoder: '
+        + ((err && err.message) || 'the camera sent no picture.'));
+    }
+  }, []);
+
+  /**
+   * Starts the decode loop against the stream already playing.
+   *
+   * The wait at the top is not politeness. ZXing sizes its capture canvas once,
+   * from the video's own width and height, and a camera that has not delivered
+   * its first frame reports zero. A canvas of no size draws nothing and then
+   * throws IndexSizeError the moment its pixels are read — which is not the
+   * "no barcode in this frame" error the loop retries after, so the loop gives
+   * up for good, without a word, behind a preview that looks perfectly alive.
+   * That is the camera that works on a phone and does nothing on a PC.
+   */
   const decode = useCallback(async (onCode) => {
     const video = videoRef.current;
     if (!video) return;
     liveRef.current = true;
+    restartsRef.current = 0;
 
-    if (HAS_NATIVE) {
+    if (!(await framesFlowing(video))) {
+      if (!liveRef.current) return;
+      setError('The camera opened but sent no picture. '
+        + 'Close anything else that might be using it, then start it again.');
+      return;
+    }
+    if (!liveRef.current) return;   // stopped while the camera was warming up
+
+    const formats = await nativeSupport();
+    if (!liveRef.current) return;
+
+    if (formats.length) {
       if (!detectorRef.current) {
-        try {
-          const supported = await window.BarcodeDetector.getSupportedFormats();
-          detectorRef.current = new window.BarcodeDetector({
-            formats: FORMATS.filter((f) => supported.includes(f)),
-          });
-        } catch {
-          detectorRef.current = new window.BarcodeDetector();
-        }
+        try { detectorRef.current = new window.BarcodeDetector({ formats }); }
+        catch { detectorRef.current = null; }
       }
+    }
+
+    if (formats.length && detectorRef.current) {
+      let misfires = 0;
       const tick = async () => {
         if (!liveRef.current) return;
         try {
           const hits = await detectorRef.current.detect(video);
+          misfires = 0;
           if (hits.length && hits[0].rawValue) onCode(hits[0].rawValue);
         } catch {
-          /* a frame that arrives mid-resize just fails; the next one won't */
+          // One frame failing is nothing; a frame caught mid-resize does it.
+          // Every frame failing means this engine cannot read this stream at
+          // all, so hand the job over rather than spin on a camera that is
+          // never going to decode anything.
+          misfires += 1;
+          if (misfires > 15) {
+            nativeFormats = [];
+            detectorRef.current = null;
+            startZxing(onCode);
+            return;
+          }
         }
         if (liveRef.current) loopRef.current = requestAnimationFrame(tick);
       };
@@ -147,17 +289,8 @@ export default function ScanLabel() {
       return;
     }
 
-    // Safari and older Android: decode in JavaScript instead.
-    try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const reader = new BrowserMultiFormatReader();
-      zxingRef.current = await reader.decodeFromVideoElement(video, (res) => {
-        if (res && liveRef.current) onCode(res.getText());
-      });
-    } catch (err) {
-      setError('Could not start the barcode decoder: ' + err.message);
-    }
-  }, []);
+    startZxing(onCode);
+  }, [startZxing]);
 
   // ---------- lookup ----------
 
@@ -271,13 +404,26 @@ export default function ScanLabel() {
     streamRef.current = stream;
     setCamera('live');
 
+    // A camera can be taken away mid-scan: another app claims the webcam, a
+    // laptop sleeps, a USB lead is nudged. The preview freezes on its last
+    // frame and decoding goes on reading that same frame for ever, so this
+    // says what happened instead of leaving a picture that never beeps.
+    stream.getVideoTracks().forEach((track) => {
+      track.addEventListener('ended', () => {
+        if (streamRef.current !== stream) return;   // already replaced
+        stop();
+        setError('The camera stopped sending pictures — another app may have '
+          + 'taken it. Start it again.');
+      });
+    });
+
     const video = videoRef.current;
     video.srcObject = stream;
     video.setAttribute('playsinline', 'true'); // iOS otherwise opens it fullscreen
     try { await video.play(); } catch { /* autoplay policies vary; the loop copes */ }
 
     decode((code) => lookup(code, { fromCamera: true }));
-  }, [decode, lookup]);
+  }, [decode, lookup, stop]);
 
   /** Back to scanning, on the stream that was left running. */
   const scanNext = useCallback(async () => {
@@ -357,6 +503,12 @@ export default function ScanLabel() {
     const code = manual.trim();
     if (!code) return;
     lastRef.current = { code: '', at: 0 }; // a deliberate retype should always run
+    // A scanner gun types the code and presses Enter for you. Emptying the box
+    // is what stops the next parcel being added onto the end of the last one
+    // and looked up as one long code belonging to nothing; keeping the focus is
+    // what lets a whole stack go through without touching the mouse.
+    setManual('');
+    if (manualRef.current) manualRef.current.focus();
     lookup(code);
   };
 
@@ -523,6 +675,7 @@ export default function ScanLabel() {
           <div className="scan-manual-row">
             <input
               id="manual-code"
+              ref={manualRef}
               value={manual}
               onChange={(e) => setManual(e.target.value)}
               placeholder="VL0085981395206"
